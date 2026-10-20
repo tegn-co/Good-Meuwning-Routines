@@ -205,6 +205,7 @@ NB = {
     "break time!": "pausetid!", "focus time!": "fokustid!",
     "{breed}!": "{breed}!",
     "meow?": "mjau?", "*stares at list*": "*stirrer på listen*", "mrrp?": "mrrp?",
+    "hi!": "hei!",
     "playtime!": "lekestund!", "mrrrow!": "mrrrjau!", "let's play!": "la oss leke!",
     "got it!": "tok den!", "pounce!": "hopp!", "mrrp!": "mrrp!", "gotcha!": "fanget!",
     "nom": "nam",

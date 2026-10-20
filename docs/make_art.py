@@ -4,6 +4,7 @@ Usage: python3 docs/make_art.py   ->  docs/*.png
 Always the default cat (orange tabby), regardless of local customization.
 """
 import math
+import random
 import sys
 from pathlib import Path
 
@@ -130,6 +131,50 @@ def breeds():
     surf.write_to_png(str(HERE / "breeds.png"))
 
 
+# The extra animations (cat_tricks.py) and a nice moment in each, in seconds
+TRICK_POSES = {"zoomies": 1.5, "tailchase": 5, "loaf": 1.5, "box": 1.5, "knead": 1.5,
+               "laser": 5, "wave": 7, "bird": 5, "roll": 1.5, "yarn": 2.5}
+
+
+def tricks():
+    """Each extra animation drawn by the app's own TitleCat (with its box, bird, yarn ...), without the title."""
+    gi.require_version("Gtk", "4.0")
+    from gi.repository import Gtk
+    Gtk.init()
+    import cat_tricks  # noqa: F401
+    cat.COLORS.update(cat.BREEDS["orange tabby"])
+    cat.set_shape("normal")
+    pal = {"bg": "#0e0e0e", "fg": FG, "muted": "#6b6b66", "line": "#262624", "accent": ACCENT}
+    blank = cairo.ImageSurface(cairo.FORMAT_ARGB32, 1, 1)
+    cat.TitleCat.letter_surface = lambda self, cr, ch, color: blank  # no title, just the cat
+    w, h, scale = 300, 110, 2  # the title cat uses 2 screen px per sprite px, the README art 4
+    for name, at in TRICK_POSES.items():
+        random.seed(name)  # same pictures every run
+        c = cat.TitleCat(lambda: pal, forced=name)
+        c.draw(None, cairo.Context(cairo.ImageSurface(cairo.FORMAT_ARGB32, w, h)), w, h)
+        for _step in range(round(at / 0.05)):
+            c.last -= 0.05
+            c.tick(None, None)
+        if name == "laser":  # the dot just ahead of the cat
+            c.dot["x"] = c.x + cat_tricks.CW + 30 if c.dir > 0 else c.x - 30
+        surf, cr = canvas(w, h, bg=False)
+        c.draw(None, cr, w, h)
+        cr.set_operator(cairo.OPERATOR_CLEAR)  # remove the "_" cursor
+        cr.rectangle(c.letters[-1][0] + c.letters[-1][1], 0, w, h)
+        cr.fill()
+        surf.flush()
+        data, stride = surf.get_data(), surf.get_stride()
+        ink = [(x, y) for y in range(h) for x in range(w) if data[y * stride + x * 4 + 3]]
+        x0, y0 = min(x for x, _ in ink) - 4, min(y for _, y in ink) - 4
+        x1, y1 = max(x for x, _ in ink) + 5, max(y for _, y in ink) + 5
+        out, oc = canvas((x1 - x0) * scale, (y1 - y0) * scale, bg=False)
+        oc.scale(scale, scale)
+        oc.set_source_surface(surf, -x0, -y0)
+        oc.get_source().set_filter(cairo.FILTER_NEAREST)
+        oc.paint()
+        out.write_to_png(str(HERE / f"cat-{name}.png"))
+
+
 def divider():
     """Thin strip: a small cat walking along a line."""
     surf, cr = canvas(600, 40, bg=False)
@@ -155,3 +200,4 @@ if __name__ == "__main__":
     accessories()
     breeds()
     divider()
+    tricks()

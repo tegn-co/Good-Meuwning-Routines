@@ -48,6 +48,7 @@ CALM_FPS = 8  # while sleeping, sitting or eating with no bouncing letters
 _SURFACES = {}  # pre-rendered sprites/letters, so each frame just blits them instead of drawing pixel by pixel
 SWITCH_MINUTES = 15
 ANIMATIONS = ["walk", "play", "sleep", "sit", "jump", "climb", "butterfly", "groom", "stretch"]
+TRICKS = {}  # more animations, added by cat_tricks.py (imported at the end of this file)
 LUNCH = (11 * 60, 12 * 60)  # lunch start/end in minutes after midnight (set under settings > schedule)
 TITLE = _("good morning")  # default title; TitleCat(title=...) can use another
 # --- Appearance and phrases (editable in the cat settings, saved in CAT_FILE) ---
@@ -586,6 +587,8 @@ class TitleCat(Gtk.DrawingArea):
             pass
         elif anim == "butterfly":
             self.butterfly_tick(dt, lo, hi, cw)
+        elif anim in TRICKS:
+            TRICKS[anim].tick(self, dt, lo, hi)
         elif anim in ("walk", "play") or self.is_stretch_walk(anim):
             speed = 70 if anim == "play" else 28
             if self.gap_jump_height(self.x + cw / 2) > 0:
@@ -687,7 +690,8 @@ class TitleCat(Gtk.DrawingArea):
 
     def is_calm(self):
         """Is everything still enough for the lower frame rate?"""
-        moving = (self.anim in ("walk", "play", "jump", "butterfly") or self.is_stretch_walk(self.anim)) and not self.away
+        moving = (self.anim in ("walk", "play", "jump", "butterfly") or self.is_stretch_walk(self.anim)
+                  or (self.anim in TRICKS and TRICKS[self.anim].moving)) and not self.away
         bouncing = any(self.vy) or self.cursor_y < 0 or self.t < self.speech_until + 0.3
         return not moving and not bouncing
 
@@ -717,6 +721,8 @@ class TitleCat(Gtk.DrawingArea):
         elif anim == "jump":
             self.x = self.next_jump_spot(lo, hi, cw)
             self.hop = {"from": self.x, "to": self.x, "t": 1.0}
+        elif anim in TRICKS:
+            TRICKS[anim].start(self, lo, hi)
         else:
             self.x = max(lo, min(hi - cw, self.x))
 
@@ -909,6 +915,8 @@ class TitleCat(Gtk.DrawingArea):
             # The butterfly above the letters, flapping its wings
             by = top - 20 * PX - 4 + math.sin(self.t * 2.2) * 12
             self.draw_sprite(cr, BUTTERFLY_SPRITES[int(self.t * 8) % 2], self.bf["x"] - 7, by)
+        elif anim in TRICKS:
+            sprite, y_off = TRICKS[anim].draw(self, cr, top, pal)
         else:  # jump
             arc = math.sin(math.pi * min(self.hop["t"], 1))
             sprite = SPRITES["run"][0] if arc > 0.2 else SPRITES["walk"][0]
@@ -919,10 +927,20 @@ class TitleCat(Gtk.DrawingArea):
             sprite = yawning_sprite(sprite)
         elif anim != "sleep" and (self.t % 4.2) < 0.12:
             sprite = [r.replace("e", "b") for r in sprite]
-        sprite = add_accessories(sprite)
+        trick = TRICKS.get(anim)
+        if not trick or trick.accessories:
+            sprite = add_accessories(sprite)
 
         cat_y = top - sprite_size(sprite)[1] * PX + PX + y_off  # the bottom outline rests on the letters
+        if trick and trick.clip_below_letters:
+            cr.save()
+            cr.rectangle(-1000, -1000, 4000, top + 1000)  # e.g. the cat sinking into its box
+            cr.clip()
         self.draw_sprite(cr, sprite, self.x, cat_y, flip)
+        if trick and trick.clip_below_letters:
+            cr.restore()
+        if trick:
+            trick.draw_front(self, cr, top, pal, cat_y)
         if "coffee" in worn_accessories() and anim in ("sit", "groom", "sleep", "stretch") and not self.is_stretch_walk(anim):
             # Coffee cup next to the cat, with a little steam
             cx = self.x - 7 * PX if flip else self.x + sprite_size(sprite)[0] * PX + 2
@@ -1274,3 +1292,6 @@ class CatOverlay(Gtk.DrawingArea):
         elif title.t < title.happy_until:
             rise = (1 - (title.happy_until - title.t) / 1.6) * 14
             title.draw_sprite(cr, HEART, hx - 5, max(2, hy - 20 - rise))
+
+
+import cat_tricks  # noqa: E402,F401  (registers the extra animations in TRICKS and ANIMATIONS)

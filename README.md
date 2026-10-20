@@ -53,6 +53,25 @@ eats lunch, chases butterflies and cheers when you check things off.
   </tr>
 </table>
 
+And ten more tricks:
+
+<table>
+  <tr>
+    <td align="center"><img src="docs/cat-zoomies.png"><br><sub><b>zoomies</b><br>races back and forth</sub></td>
+    <td align="center"><img src="docs/cat-tailchase.png"><br><sub><b>tailchase</b><br>spins after its tail</sub></td>
+    <td align="center"><img src="docs/cat-loaf.png"><br><sub><b>loaf</b><br>turns into a bread loaf</sub></td>
+    <td align="center"><img src="docs/cat-box.png"><br><sub><b>box</b><br>peeks out of a box</sub></td>
+    <td align="center"><img src="docs/cat-knead.png"><br><sub><b>knead</b><br>makes biscuits</sub></td>
+  </tr>
+  <tr>
+    <td align="center"><img src="docs/cat-laser.png"><br><sub><b>laser</b><br>hunts a laser dot</sub></td>
+    <td align="center"><img src="docs/cat-wave.png"><br><sub><b>wave</b><br>says hi!</sub></td>
+    <td align="center"><img src="docs/cat-bird.png"><br><sub><b>bird</b><br>stalks a little bird</sub></td>
+    <td align="center"><img src="docs/cat-roll.png"><br><sub><b>roll</b><br>rolls over for belly rubs</sub></td>
+    <td align="center"><img src="docs/cat-yarn.png"><br><sub><b>yarn</b><br>bats a ball of yarn</sub></td>
+  </tr>
+</table>
+
 The animation changes every 15 minutes. Check something off and it says **good job!**
 
 <p align="center"><img src="docs/accessories.png" alt="bow tie, coffee cup, beanie, Santa hat, ghost" width="560"><br>
@@ -149,7 +168,8 @@ Run from source:
 ```sh
 python3 app.py                 # the app
 python3 app.py --cat=climb     # force an animation: walk, play, sleep, sit, jump, climb,
-                               # butterfly, groom, stretch, eat
+                               # butterfly, groom, stretch, eat, zoomies, tailchase, loaf,
+                               # box, knead, laser, wave, bird, roll, yarn
 python3 docs/make_art.py       # regenerate the pixel art in this README
 ```
 
@@ -182,6 +202,7 @@ packaging/windows/build.sh 1.6.0 && iscc /DAppVersion=1.6.0 packaging/windows/in
 |---|---|
 | `app.py` | the app and its main window: list, plan, hours, settings, backup, updates |
 | `cat.py` | the pixel cat, its animations, accessories and seasons |
+| `cat_tricks.py` | ten extra animations (zoomies, box, laser, yarn …) |
 | `cat_panel.py` | cat side panel: breed, colors, accessories and what the cat says |
 | `pomodoro_panel.py` | pomodoro side panel |
 | `database.py` | SQLite database, streaks, backup and CSV export |
