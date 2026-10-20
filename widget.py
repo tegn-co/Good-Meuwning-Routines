@@ -168,7 +168,7 @@ class Widget(Adw.ApplicationWindow):
         # Tittelen «good morning» med pixel-katten som lever oppå bokstavene
         self.title_cat = TitleCat(palette, forced=cat)
         body.append(self.title_cat)
-        self.overlay.add_overlay(CatRoamer(self.title_cat))
+        CatRoamer(self.title_cat, self.overlay)  # legger seg selv i overlay-et
         self.pomodoro = PomodoroPanel(self.title_cat, palette, on_change=self.on_pomodoro_change)
         self.side_stack.add_named(self.pomodoro, "pomo")
         self.side_stack.add_named(CatSettings(self.title_cat), "cat")

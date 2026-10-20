@@ -744,11 +744,12 @@ class TitleCat(Gtk.DrawingArea):
         cr.restore()
 
 
-class CatRoamer(Gtk.Fixed):
+class CatRoamer(Gtk.DrawingArea):
     """Gjennomsiktig lag over hele vinduet som tegner katten.
 
-    Selve tegneflaten er bare en liten rute (BOX) som flyttes dit katten er; da tegner GTK bare om den
-    ruta i stedet for hele vinduet (uten grafikkort tegnes alt med prosessoren).
+    Selve tegneflaten er bare en liten rute (BOX) som overlay-et plasserer der katten er (get-child-position);
+    da tegner GTK bare om den ruta i stedet for hele vinduet. Rammen katten går rundt er overlay-ets størrelse,
+    som alltid er det synlige innholdet – ruta kan aldri gjøre den større.
 
     På tittelen tegnes den der tittelen er (TitleCat styrer animasjonen). Er tittelen scrollet ut av syne,
     eller animasjonen er «climb», går katten rundt innsiden av vinduskanten: bunnen, opp høyre vegg,
@@ -760,11 +761,12 @@ class CatRoamer(Gtk.Fixed):
     HALF = 11 * PX  # halve kattelengden: katten snur i hjørnet når nesen når veggen, så ingenting stikker ut
     BOX = 160  # tegneflaten rundt katten (plass til boble, skål og z-er)
 
-    def __init__(self, title):
-        super().__init__(can_target=False, hexpand=True, vexpand=True)
-        self.canvas = Gtk.DrawingArea(can_target=False, width_request=self.BOX, height_request=self.BOX)
-        self.canvas.set_draw_func(self.draw_canvas)
-        self.put(self.canvas, 0, 0)
+    def __init__(self, title, overlay):
+        super().__init__(can_target=False)
+        self.overlay = overlay
+        self.set_draw_func(self.draw_canvas)
+        overlay.add_overlay(self)
+        overlay.connect("get-child-position", self.position)
         self.origin = (0, 0)
         self.title = title
         title.external = True
@@ -775,10 +777,24 @@ class CatRoamer(Gtk.Fixed):
         self.last = time.monotonic()
         GLib.timeout_add(1000 // FPS, self.tick, None, None)
 
+    def position(self, overlay, widget, rect):
+        if widget is not self:
+            return False
+        rect.x, rect.y = self.origin
+        rect.width = rect.height = self.BOX
+        return True
+
+    # Rammen = overlay-et (det synlige innholdet), ikke denne lille tegneflaten
+    def area_w(self):
+        return self.overlay.get_width()
+
+    def area_h(self):
+        return self.overlay.get_height()
+
     # --- geometri ---
     def sides(self):
         """Lengden på hver kant katten kan gå langs (midten av katten holder seg en halv katt fra hjørnene)."""
-        w, h, m = self.get_width(), self.get_height(), self.EDGE
+        w, h, m = self.area_w(), self.area_h(), self.EDGE
         return max(1, w - 2 * m - 2 * self.HALF), max(1, h - 2 * m - 2 * self.HALF), m
 
     def perimeter(self):
@@ -788,7 +804,7 @@ class CatRoamer(Gtk.Fixed):
     def frame_pose(self, s):
         """(x, y, vinkel) for potene ved posisjon s langs rammen. Vinkelen peker kattens «ned» mot kanten."""
         iw, ih, m = self.sides()
-        w, h, e = self.get_width(), self.get_height(), self.HALF
+        w, h, e = self.area_w(), self.area_h(), self.HALF
         s %= max(1.0, self.perimeter())
         if s < iw:
             return m + e + s, h - m, 0.0  # bunnen, går mot høyre
@@ -803,12 +819,12 @@ class CatRoamer(Gtk.Fixed):
 
     def title_pose(self):
         """(x, y, synlig) for kattens poter på tittelen, i lagets koordinater."""
-        ok, p = self.title.compute_point(self, Graphene.Point())
+        ok, p = self.title.compute_point(self.overlay, Graphene.Point())
         if not ok:
             return 0, 0, False
         x = p.x + self.title.x + 10 * PX
         y = p.y + self.title.top + PX
-        visible = y - 17 * PX >= 0 and y <= self.get_height()  # hele katten må få plass
+        visible = y - 17 * PX >= 0 and y <= self.area_h()  # hele katten må få plass
         return x, y, visible
 
     # --- animasjon ---
@@ -817,7 +833,7 @@ class CatRoamer(Gtk.Fixed):
             return False
         now = time.monotonic()
         dt, self.last = min(now - self.last, 0.05), now
-        if self.get_width() == 0:
+        if self.area_w() == 0:
             return True
         tx, ty, visible = self.title_pose()
         climbing = self.title.animation() == "climb"
@@ -828,7 +844,7 @@ class CatRoamer(Gtk.Fixed):
             self.title.away = True
             if not visible:
                 # Tittelen er scrollet bort: katten klatrer ned i rammen ovenfra langs nærmeste vegg
-                if tx < self.get_width() / 2:
+                if tx < self.area_w() / 2:
                     self.s, self.d = 2 * iw + ih, 1  # toppen av venstre vegg, nedover
                 else:
                     self.s, self.d = iw + ih, -1  # toppen av høyre vegg, nedover
@@ -836,7 +852,7 @@ class CatRoamer(Gtk.Fixed):
                 self.mode = "frame"
             else:
                 # climb: hopp fra tittelen ut på nærmeste sidevegg
-                if tx < self.get_width() / 2:
+                if tx < self.area_w() / 2:
                     s, d = 2 * iw + ih + max(0, ty - m), 1
                 else:
                     s, d = iw + (ih - max(0, ty - m)), -1
@@ -869,8 +885,8 @@ class CatRoamer(Gtk.Fixed):
             origin = (round(ax - self.BOX / 2), round(ay - self.BOX * 0.62))
             if origin != self.origin:
                 self.origin = origin
-                self.move(self.canvas, *origin)
-            self.canvas.queue_draw()
+                self.overlay.queue_allocate()  # flytt ruta (se position)
+            self.queue_draw()
         return True
 
     def anchor(self):
@@ -887,7 +903,7 @@ class CatRoamer(Gtk.Fixed):
 
     def draw_canvas(self, area, cr, width, height):
         cr.translate(-self.origin[0], -self.origin[1])
-        self.draw(area, cr, self.get_width(), self.get_height())
+        self.draw(area, cr, self.area_w(), self.area_h())
 
     def hop_lift(self, y0, y1):
         """Hvor høyt hoppet går: 40 px, men aldri så høyt at katten forsvinner over toppkanten."""
@@ -902,7 +918,7 @@ class CatRoamer(Gtk.Fixed):
         title = self.title
         if self.mode == "title":
             tx, ty, _ = self.title_pose()
-            ok, p = title.compute_point(self, Graphene.Point())
+            ok, p = title.compute_point(self.overlay, Graphene.Point())
             cr.save()
             cr.translate(p.x, p.y)
             title.draw_cat(cr, title.get_width())
