@@ -676,7 +676,8 @@ class Widget(Adw.ApplicationWindow):
     # --- første oppstart ---
     def show_onboarding(self):
         opening = getattr(self, "last_summary", {}).get("opening_balance", 0.0)
-        Onboarding(self, palette, self.on_onboarding_done, opening=opening).present()
+        self.onboarding = Onboarding(self, palette, self.on_onboarding_done, opening=opening)
+        self.onboarding.present()
 
     def on_onboarding_done(self, opening, sch, problems):
         if opening is not None:

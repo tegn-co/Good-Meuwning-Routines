@@ -76,7 +76,8 @@ def time_picker(hhmm):
 
 class Onboarding(Adw.Window):
     def __init__(self, parent, palette, on_done, opening=0.0):
-        super().__init__(transient_for=parent, modal=True, title="Welcome", default_width=420, default_height=560)
+        super().__init__(application=parent.get_application(), transient_for=parent, modal=True,
+                         title="Welcome", default_width=420, default_height=560)
         self.on_done = on_done
         self.initial_opening = opening  # vist på nytt fra ⚙: behold det man har
         root = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
