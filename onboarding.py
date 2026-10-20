@@ -11,6 +11,7 @@ from gi.repository import Adw, Gio, GLib, Gtk  # noqa: E402
 import db
 import schedule
 from cat import TitleCat
+from i18n import _
 
 APP_DESKTOP = "no.zivid.MorgenTodo.desktop"
 
@@ -56,7 +57,7 @@ def pin_to_dock():
 
 
 def label(text, *classes):
-    lbl = Gtk.Label(label=text, xalign=0, wrap=True)
+    lbl = Gtk.Label(label=_(text), xalign=0, wrap=True)
     for c in classes:
         lbl.add_css_class(c)
     return lbl
@@ -81,7 +82,7 @@ def time_picker(hhmm):
 class Onboarding(Adw.Window):
     def __init__(self, parent, palette, on_done, opening=0.0):
         super().__init__(application=parent.get_application(), transient_for=parent, modal=True,
-                         title="Welcome", default_width=420, default_height=560)
+                         title=_("Welcome"), default_width=420, default_height=560)
         self.on_done = on_done
         self.initial_opening = opening  # vist på nytt fra ⚙: behold det man har
         root = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
@@ -97,12 +98,12 @@ class Onboarding(Adw.Window):
         root.append(self.carousel)
 
         nav = Gtk.Box(margin_start=24, margin_end=24, margin_bottom=18, spacing=8)
-        self.back = Gtk.Button(label="back")
+        self.back = Gtk.Button(label=_("back"))
         self.back.add_css_class("pixel")
         self.back.connect("clicked", lambda _: self.go(-1))
         nav.append(self.back)
         nav.append(Adw.CarouselIndicatorDots(carousel=self.carousel, hexpand=True))
-        self.next = Gtk.Button(label="next")
+        self.next = Gtk.Button(label=_("next"))
         self.next.add_css_class("pixel")
         self.next.add_css_class("go")
         self.next.connect("clicked", lambda _: self.go(1))
@@ -113,7 +114,7 @@ class Onboarding(Adw.Window):
 
     def page(self, palette, title, anim, content):
         box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10, margin_start=24, margin_end=24, hexpand=True)
-        cat = TitleCat(palette, forced=anim, title=title)
+        cat = TitleCat(palette, forced=anim, title=_(title))
         self.cats.append(cat)
         box.append(cat)
         box.append(content)
@@ -143,14 +144,14 @@ class Onboarding(Adw.Window):
         self.opening.set_value(self.initial_opening)
         row("overtime you already have (hours)", self.opening)
 
-        self.morning_on = Gtk.CheckButton(label="open the list on weekdays at", active=sch["morning_on"])
+        self.morning_on = Gtk.CheckButton(label=_("open the list on weekdays at"), active=sch["morning_on"])
         self.morning_on.add_css_class("detail")
         picker, self.morning_time = time_picker(sch["morning"])
         r = Gtk.Box(spacing=8)
         r.append(self.morning_on)
         r.append(picker)
         form.append(r)
-        self.hours_on = Gtk.CheckButton(label="remind me to log hours at", active=sch["hours_on"])
+        self.hours_on = Gtk.CheckButton(label=_("remind me to log hours at"), active=sch["hours_on"])
         self.hours_on.add_css_class("detail")
         picker, self.hours_time = time_picker(sch["hours"])
         r = Gtk.Box(spacing=8)
@@ -158,7 +159,7 @@ class Onboarding(Adw.Window):
         r.append(picker)
         form.append(r)
 
-        self.pin = Gtk.CheckButton(label="pin Morning Routine to the dock", active=True)
+        self.pin = Gtk.CheckButton(label=_("pin Morning Routine to the dock"), active=True)
         self.pin.add_css_class("detail")
         self.pin.set_visible(on_gnome())
         form.append(self.pin)
@@ -177,7 +178,7 @@ class Onboarding(Adw.Window):
 
     def on_page(self, carousel, index):
         last = index == carousel.get_n_pages() - 1
-        self.next.set_label("let's go!" if last else "next")
+        self.next.set_label(_("let's go!") if last else _("next"))
         self.back.set_sensitive(index > 0)
 
     def finish(self):

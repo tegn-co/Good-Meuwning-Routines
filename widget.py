@@ -24,6 +24,7 @@ import db  # noqa: E402
 import schedule  # noqa: E402
 from onboarding import Onboarding  # noqa: E402
 import updates  # noqa: E402
+from i18n import LANG, LANGUAGES, _  # noqa: E402
 
 SAVE_DELAY = 10  # sekunder uten endringer før lagring
 MAIN_H = 600  # vinduet starter alltid i MAIN_W × MAIN_H med sidepanelet lukket
@@ -96,7 +97,7 @@ def set_struck(lbl, text, on):
 
 
 def label(text, *classes, wrap=False):
-    lbl = Gtk.Label(label=text, xalign=0, wrap=wrap)
+    lbl = Gtk.Label(label=_(text), xalign=0, wrap=wrap)
     for c in classes:
         lbl.add_css_class(c)
     return lbl
@@ -118,17 +119,17 @@ class Widget(Adw.ApplicationWindow):
         self.theme_btn.connect("clicked", lambda _: app.cycle_theme())
         header.pack_start(self.theme_btn)
         # Åpner/lukker pomodoro-panelet; viser gjenstående tid mens klokka går
-        self.pomo_btn = Gtk.ToggleButton(label="pomo", tooltip_text="Pomodoro timer")
+        self.pomo_btn = Gtk.ToggleButton(label="pomo", tooltip_text=_("Pomodoro timer"))
         self.pomo_btn.add_css_class("flat")
         self.pomo_btn.connect("toggled", self.on_side_toggled, "pomo")
         header.pack_start(self.pomo_btn)
         # Åpner/lukker katteinnstillingene
-        self.cat_btn = Gtk.ToggleButton(label="cat", tooltip_text="Customize the cat")
+        self.cat_btn = Gtk.ToggleButton(label=_("cat"), tooltip_text=_("Customize the cat"))
         self.cat_btn.add_css_class("flat")
         self.cat_btn.connect("toggled", self.on_side_toggled, "cat")
         header.pack_start(self.cat_btn)
         # Innstillinger: her slettes punkter (ikke i selve listen, så ingenting forsvinner ved et feiltrykk)
-        self.settings_btn = Gtk.ToggleButton(label="⚙", tooltip_text="Settings")
+        self.settings_btn = Gtk.ToggleButton(label="⚙", tooltip_text=_("Settings"))
         self.settings_btn.add_css_class("flat")
         self.settings_btn.connect("toggled", self.on_side_toggled, "settings")
         header.pack_start(self.settings_btn)
@@ -182,11 +183,11 @@ class Widget(Adw.ApplicationWindow):
         self.update_lbl = label("", "detail", wrap=True)
         self.update_lbl.set_hexpand(True)
         bar.append(self.update_lbl)
-        self.update_btn = Gtk.Button(label="update", valign=Gtk.Align.CENTER)
+        self.update_btn = Gtk.Button(label=_("update"), valign=Gtk.Align.CENTER)
         self.update_btn.add_css_class("flat")
         self.update_btn.connect("clicked", self.on_update_clicked)
         bar.append(self.update_btn)
-        close = Gtk.Button(label="×", valign=Gtk.Align.CENTER, tooltip_text="Not now")
+        close = Gtk.Button(label="×", valign=Gtk.Align.CENTER, tooltip_text=_("Not now"))
         close.add_css_class("flat")
         close.connect("clicked", lambda _: self.update_bar.set_reveal_child(False))
         bar.append(close)
@@ -246,11 +247,11 @@ class Widget(Adw.ApplicationWindow):
 
             extra = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, margin_start=30, margin_top=4)
             for d in details:
-                extra.append(label(f"› {d}", "detail", wrap=True))
+                extra.append(label("› " + _(d), "detail", wrap=True))
             if key == "prep":
                 self.meeting_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
                 extra.append(self.meeting_box)
-                add = Gtk.Button(label="+ add meeting", halign=Gtk.Align.START)
+                add = Gtk.Button(label=_("+ add meeting"), halign=Gtk.Align.START)
                 add.add_css_class("flat")
                 add.connect("clicked", self.on_add_meeting)
                 extra.append(add)
@@ -269,7 +270,7 @@ class Widget(Adw.ApplicationWindow):
         # --- Egne rutinepunkter kommer tilbake hver dag; legges til her ---
         add_row = Gtk.Box(spacing=10, margin_top=6, margin_bottom=10)
         add_row.append(label("+", "num"))
-        self.new_todo = Gtk.Entry(placeholder_text="add to routine and press enter", hexpand=True)
+        self.new_todo = Gtk.Entry(placeholder_text=_("add to routine and press enter"), hexpand=True)
         self.new_todo.connect("activate", self.on_add_todo)
         add_row.append(self.new_todo)
         body.append(add_row)
@@ -292,7 +293,7 @@ class Widget(Adw.ApplicationWindow):
         self.today_diff = label("", "detail")
         self.today_diff.set_margin_start(30)
         self.hours_box.append(self.today_diff)
-        self.day_off = Gtk.CheckButton(label="day off (vacation, sick, holiday)", margin_start=26)
+        self.day_off = Gtk.CheckButton(label=_("day off (vacation, sick, holiday)"), margin_start=26)
         self.day_off.add_css_class("detail")
         self.day_off.get_last_child().set_wrap(True)
         self.day_off.connect("toggled", self.on_day_off_changed)
@@ -347,7 +348,7 @@ class Widget(Adw.ApplicationWindow):
         if err or not info:
             return
         n = info["streak"]
-        self.streak_lbl.set_label(f"{n} days in a row" if n >= 2 else "")
+        self.streak_lbl.set_label(_("{n} days in a row").format(n=n) if n >= 2 else "")
         self.streak_lbl.set_visible(n >= 2)
         (self.streak_lbl.add_css_class if self.state.get("complete") else self.streak_lbl.remove_css_class)("plus")
         unlocked = {k for k, days, _ in catmod.UNLOCKS if info["best"] >= days}
@@ -358,9 +359,9 @@ class Widget(Adw.ApplicationWindow):
         self.cat_settings.refresh_wear()
         if not first and new:
             name = next(label for k, _, label in catmod.UNLOCKS if k in new)
-            self.title_cat.say(f"unlocked: {name}!", 3)
+            self.title_cat.say(_("unlocked: {name}!").format(name=_(name)), 3)
         elif not first and self.state.get("complete") and n >= 2 and n != getattr(self, "streak_seen", 0):
-            self.title_cat.say(f"{n} days in a row!", 3)
+            self.title_cat.say(_("{n} days in a row!").format(n=n), 3)
         self.streak_seen = n
 
     def mood(self):
@@ -371,7 +372,7 @@ class Widget(Adw.ApplicationWindow):
         keys = self.order()
         done = sum(bool(self.state["checks"].get(k)) for k in keys)
         if done == 0 and now.hour >= 10:
-            self.title_cat.say(random.choice(["meow?", "*stares at list*", "mrrp?"]), 2)
+            self.title_cat.say(_(random.choice(["meow?", "*stares at list*", "mrrp?"])), 2)
         elif keys and done == len(keys):
             self.title_cat.say("", 0)  # bare et hjerte: fornøyd katt
 
@@ -436,7 +437,7 @@ class Widget(Adw.ApplicationWindow):
             GLib.source_remove(self.save_id)
             self.save_id = 0
         d = self.day
-        self.date_lbl.set_label(f"{DAYS[d.weekday()]} {d.day} {MONTHS[d.month - 1]}")
+        self.date_lbl.set_label(f"{_(DAYS[d.weekday()])} {d.day}{'.' if LANG == 'nb' else ''} {_(MONTHS[d.month - 1])}")
         self.set_status(True, "○ loading…")
         self.scroll.set_sensitive(False)  # det som skrives nå, ville blitt erstattet når dataene kommer
         self.db.submit(db.load_day, d, callback=lambda result, err: self.on_loaded(d, result, err))
@@ -509,7 +510,7 @@ class Widget(Adw.ApplicationWindow):
         done = sum(bool(self.state["checks"].get(k)) for k in keys)
         total = len(keys)
         self.blocks.set_markup("■" * done + f'<span foreground="{palette()["line"]}">{"■" * (total - done)}</span>')
-        self.footer.set_label("[ all done – have a great day ]" if done == total else f"{done}/{total}")
+        self.footer.set_label(_("[ all done – have a great day ]") if done == total else f"{done}/{total}")
         # Hele listen ferdig akkurat nå (ikke når den lastes inn ferdig)
         if done == total and not getattr(self, "all_done", True) and not self.loading:
             self.title_cat.react("all_done", 3)
@@ -518,7 +519,7 @@ class Widget(Adw.ApplicationWindow):
         for key, (item, check, extra) in self.items.items():
             on = check.get_active()
             (item.add_css_class if on else item.remove_css_class)("done")
-            set_struck(self.titles[key], dict((k, t) for k, t, _ in ITEMS)[key], on)
+            set_struck(self.titles[key], _(dict((k, t) for k, t, _d in ITEMS)[key]), on)
             extra.set_visible(not on)
 
     def update_hours(self):
@@ -527,17 +528,17 @@ class Widget(Adw.ApplicationWindow):
     def show_hours(self, sm, err):
         if sm and not err:
             self.last_summary = sm
-        fmt = lambda h: f"{h:+.2f} h"
+        fmt = lambda h: f"{h:+.2f} {_('h')}"
         h = self.state.get("hours")
         expected = db.expected_for(self.day, self.state.get("day_off"))
         if h is None:
-            self.today_diff.set_label(f"not logged yet · expected {expected:g} h")
+            self.today_diff.set_label(_("not logged yet · expected {h} h").format(h=f"{expected:g}"))
         else:
-            self.today_diff.set_label(f"today {fmt(h - expected)} vs {expected:g} h")
+            self.today_diff.set_label(_("today {diff} vs {h} h").format(diff=fmt(h - expected), h=f"{expected:g}"))
         if sm and not err:
             self.bal_total.set_label(fmt(sm["total"]))
             (self.bal_total.add_css_class if sm["total"] > 0 else self.bal_total.remove_css_class)("plus")
-            self.bal_detail.set_label(f"overtime balance\nweek {fmt(sm['week'])} · month {fmt(sm['month'])}")
+            self.bal_detail.set_label(_("overtime balance\nweek {week} · month {month}").format(week=fmt(sm["week"]), month=fmt(sm["month"])))
 
     def focus_hours(self):
         """Kalles kl 15:00: marker timeføringen og sett fokus på feltet."""
@@ -669,7 +670,7 @@ class Widget(Adw.ApplicationWindow):
         page = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
         head = Gtk.Box()
         head.append(label("settings", "big"))
-        tutorial = Gtk.Button(label="show tutorial", hexpand=True, halign=Gtk.Align.END)
+        tutorial = Gtk.Button(label=_("show tutorial"), hexpand=True, halign=Gtk.Align.END)
         tutorial.add_css_class("flat")
         tutorial.connect("clicked", lambda _: self.show_onboarding())
         head.append(tutorial)
@@ -699,10 +700,10 @@ class Widget(Adw.ApplicationWindow):
         self.past_hours = Gtk.SpinButton.new_with_range(0, 24, 0.25)
         self.past_hours.set_digits(2)
         row.append(self.past_hours)
-        self.past_off = Gtk.CheckButton(label="day off")
+        self.past_off = Gtk.CheckButton(label=_("day off"))
         self.past_off.add_css_class("detail")
         row.append(self.past_off)
-        save = self.past_save_btn = Gtk.Button(label="save", hexpand=True, halign=Gtk.Align.END, sensitive=False)
+        save = self.past_save_btn = Gtk.Button(label=_("save"), hexpand=True, halign=Gtk.Align.END, sensitive=False)
         save.add_css_class("flat")
         save.connect("clicked", self.on_past_save)
         row.append(save)
@@ -718,7 +719,7 @@ class Widget(Adw.ApplicationWindow):
         buttons = Gtk.Box(spacing=4)
         for text, handler in (("export…", self.on_export_backup), ("restore…", self.on_restore_backup),
                               ("hours as CSV…", self.on_export_csv)):
-            b = Gtk.Button(label=text)
+            b = Gtk.Button(label=_(text))
             b.add_css_class("flat")
             b.connect("clicked", handler)
             buttons.append(b)
@@ -726,13 +727,24 @@ class Widget(Adw.ApplicationWindow):
         self.backup_status = label("", "detail", "muted", wrap=True)
         page.append(self.backup_status)
 
+        # Språk
+        heading = label("language", "num")
+        heading.set_margin_top(14)
+        page.append(heading)
+        codes = [c for c, _n in LANGUAGES]
+        lang = Gtk.DropDown.new_from_strings([n for _c, n in LANGUAGES])
+        lang.set_selected(codes.index(LANG))
+        lang.connect("notify::selected", lambda d, _p: codes[d.get_selected()] != LANG and (
+            db.update_config(language=codes[d.get_selected()]), self.restart()))
+        page.append(lang)
+
         # Oppdateringer
         heading = label("updates", "num")
         heading.set_margin_top(14)
         page.append(heading)
         version = updates.installed_version()
-        page.append(label(f"version {version}" if version else "running from source", "detail", "muted"))
-        self.check_updates = Gtk.CheckButton(label="check for new versions", active=db.load_config().get("check_updates", True))
+        page.append(label(_("version {version}").format(version=version) if version else "running from source", "detail", "muted"))
+        self.check_updates = Gtk.CheckButton(label=_("check for new versions"), active=db.load_config().get("check_updates", True))
         self.check_updates.add_css_class("detail")
         self.check_updates.connect("toggled", lambda b: db.update_config(check_updates=b.get_active()))
         page.append(self.check_updates)
@@ -761,41 +773,41 @@ class Widget(Adw.ApplicationWindow):
         else:
             dialog.open(self, None, done)
 
-    def on_export_backup(self, _):
+    def on_export_backup(self, _widget):
         def chosen(path):
-            self.backup_status.set_label("saving backup…")
+            self.backup_status.set_label(_("saving backup…"))
             self.db.submit(db.export_backup, path, callback=lambda r, e: self.backup_status.set_label(
-                f"could not save – {e}" if e else f"backup saved: {path}"))
-        self.choose_file("Save backup", f"morning-routine-backup-{date.today()}.zip", chosen)
+                _("could not save – {err}").format(err=e) if e else _("backup saved: {path}").format(path=path)))
+        self.choose_file(_("Save backup"), f"morning-routine-backup-{date.today()}.zip", chosen)
 
-    def on_export_csv(self, _):
+    def on_export_csv(self, _widget):
         def chosen(path):
             self.db.submit(db.export_hours_csv, path, callback=lambda n, e: self.backup_status.set_label(
-                f"could not save – {e}" if e else f"{n} days of hours saved: {path}"))
-        self.choose_file("Save hours", f"hours-{date.today()}.csv", chosen)
+                _("could not save – {err}").format(err=e) if e else _("{n} days of hours saved: {path}").format(n=n, path=path)))
+        self.choose_file(_("Save hours"), f"hours-{date.today()}.csv", chosen)
 
-    def on_restore_backup(self, _):
+    def on_restore_backup(self, _widget):
         def chosen(path):
-            alert = Adw.AlertDialog(heading="Restore this backup?",
-                                    body="Your current list, hours and settings are replaced by the backup. "
-                                         "A copy of the current database is kept next to it.")
-            alert.add_response("cancel", "Cancel")
-            alert.add_response("restore", "Restore")
+            alert = Adw.AlertDialog(heading=_("Restore this backup?"),
+                                    body=_("Your current list, hours and settings are replaced by the backup. "
+                                           "A copy of the current database is kept next to it."))
+            alert.add_response("cancel", _("Cancel"))
+            alert.add_response("restore", _("Restore"))
             alert.set_response_appearance("restore", Adw.ResponseAppearance.DESTRUCTIVE)
             alert.connect("response", lambda _, r: r == "restore" and self.restore_from(path))
             alert.present(self)
-        self.choose_file("Restore backup", None, chosen, pattern="*.zip")
+        self.choose_file(_("Restore backup"), None, chosen, pattern="*.zip")
 
     def restore_from(self, path):
         if self.save_id:  # ingen ventende lagring skal skrive over kopien etterpå
             GLib.source_remove(self.save_id)
             self.save_id = 0
         self.loaded = False
-        self.backup_status.set_label("restoring…")
+        self.backup_status.set_label(_("restoring…"))
 
-        def done(_, err):
+        def done(_result, err):
             if err:
-                self.backup_status.set_label(f"could not restore – {err}")
+                self.backup_status.set_label(_("could not restore – {err}").format(err=err))
                 self.load()
                 return
             self.restart()  # innstillinger (katt, tema, tider) leses ved oppstart
@@ -822,9 +834,9 @@ class Widget(Adw.ApplicationWindow):
             if db.load_config().get("skip_version") == latest:
                 return
             self.update_latest = latest
-            self.update_lbl.set_label(f"Version {latest} is available (you have {current}).")
+            self.update_lbl.set_label(_("Version {latest} is available (you have {current}).").format(latest=latest, current=current))
             self.update_btn.set_sensitive(True)
-            self.update_btn.set_label("update")
+            self.update_btn.set_label(_("update"))
             self.update_bar.set_reveal_child(True)
 
         threading.Thread(target=lambda: self.fetch(updates.newer_available, done), daemon=True).start()
@@ -839,22 +851,22 @@ class Widget(Adw.ApplicationWindow):
         GLib.idle_add(lambda: callback(result, err) and False)
 
     def on_update_clicked(self, btn):
-        if btn.get_label() == "restart":
+        if btn.get_label() == _("restart"):
             self.restart()
             return
         btn.set_sensitive(False)
-        self.update_lbl.set_label("Downloading…")
+        self.update_lbl.set_label(_("Downloading…"))
 
         def downloaded(path, err):
             if err:
-                self.update_lbl.set_label(f"Download failed – {err}")
+                self.update_lbl.set_label(_("Download failed – {err}").format(err=err))
                 btn.set_sensitive(True)
                 return
             cmd = updates.install_command(path)
             if not cmd:
-                self.update_lbl.set_label(f"Run this in a terminal to update:\n{updates.INSTALL_COMMAND}")
+                self.update_lbl.set_label(_("Run this in a terminal to update:\n{cmd}").format(cmd=updates.INSTALL_COMMAND))
                 return
-            self.update_lbl.set_label("Installing – enter your password in the dialog…")
+            self.update_lbl.set_label(_("Installing – enter your password in the dialog…"))
             proc = Gio.Subprocess.new(cmd, Gio.SubprocessFlags.NONE)
 
             def finished(p, res):
@@ -863,12 +875,12 @@ class Widget(Adw.ApplicationWindow):
                 except GLib.Error:
                     ok = False
                 if ok:
-                    self.update_lbl.set_label(f"Updated to {self.update_latest}. Restart to use it.")
-                    btn.set_label("restart")
+                    self.update_lbl.set_label(_("Updated to {version}. Restart to use it.").format(version=self.update_latest))
+                    btn.set_label(_("restart"))
                 else:
-                    self.update_lbl.set_label("Not updated (cancelled or failed). Try again, or run:\n"
-                                              + updates.INSTALL_COMMAND)
-                    btn.set_label("update")
+                    self.update_lbl.set_label(_("Not updated (cancelled or failed). Try again, or run:\n{cmd}").format(
+                        cmd=updates.INSTALL_COMMAND))
+                    btn.set_label(_("update"))
                 btn.set_sensitive(True)
 
             proc.wait_check_async(None, finished)
@@ -910,7 +922,7 @@ class Widget(Adw.ApplicationWindow):
 
         for key, text, with_days in [("morning", "open the list", True), ("hours", "remind me to log hours", True),
                                      ("close", "save & close", False)]:
-            on = Gtk.CheckButton(label=text, active=sch[f"{key}_on"])
+            on = Gtk.CheckButton(label=_(text), active=sch[f"{key}_on"])
             on.add_css_class("detail")
             on.get_last_child().set_wrap(True)  # lang tekst brytes i stedet for å gjøre panelet bredere
             picker, hh, mm = time_picker(key)
@@ -920,7 +932,7 @@ class Widget(Adw.ApplicationWindow):
                 days = Gtk.Box(spacing=2, margin_start=26)
                 self.day_btns[key] = []
                 for i, name in enumerate(schedule.DAY_NAMES):
-                    b = Gtk.ToggleButton(label=name[:2], active=i in sch[f"{key}_days"])
+                    b = Gtk.ToggleButton(label=_(name)[:2], active=i in sch[f"{key}_days"])
                     b.add_css_class("flat")
                     days.append(b)
                     self.day_btns[key].append(b)
@@ -938,7 +950,7 @@ class Widget(Adw.ApplicationWindow):
         self.sched_widgets["lunch"] = (None, lh, lm)
         self.sched_widgets["lunch_end"] = (None, eh, em)
 
-        apply = Gtk.Button(label="apply", halign=Gtk.Align.END)
+        apply = Gtk.Button(label=_("apply"), halign=Gtk.Align.END)
         apply.add_css_class("flat")
         apply.connect("clicked", self.on_schedule_apply)
         box.append(apply)
@@ -973,9 +985,9 @@ class Widget(Adw.ApplicationWindow):
                 on.set_active(sch[f"{key}_on"])
         if problems:
             self.set_status(False, "● setup: " + "; ".join(problems))
-        self.title_cat.say("welcome!", 3)
+        self.title_cat.say(_("welcome!"), 3)
 
-    def on_schedule_apply(self, _):
+    def on_schedule_apply(self, _widget):
         sch = dict(self.schedule)
         for key, (on, hh, mm) in self.sched_widgets.items():
             sch[key] = f"{int(hh.get_value()):02d}:{int(mm.get_value()):02d}"
@@ -984,23 +996,24 @@ class Widget(Adw.ApplicationWindow):
         for key, btns in self.day_btns.items():
             sch[f"{key}_days"] = [i for i, b in enumerate(btns) if b.get_active()]
         if sch["lunch_end"] <= sch["lunch"]:
-            self.sched_status.set_label("not saved – lunch must end after it starts")
+            self.sched_status.set_label(_("not saved – lunch must end after it starts"))
             return
         try:
             schedule.save(sch)
         except OSError as e:
-            self.sched_status.set_label(f"not saved – {e}")
+            self.sched_status.set_label(_("not saved – {err}").format(err=e))
             return
         self.apply_schedule(sch)
-        self.sched_status.set_label("saving…")
+        self.sched_status.set_label(_("saving…"))
 
         def done(runs, err):
             if err:
-                self.sched_status.set_label(f"saved, but reminders could not be set – {err}")
+                self.sched_status.set_label(_("saved, but reminders could not be set – {err}").format(err=err))
                 return
-            nxt = lambda v: v.rsplit(" ", 1)[0] if v != "off" else "off"
-            close = f"{self.close_at:%a %H:%M}" if self.close_at else "off"
-            self.sched_status.set_label(f"saved · next open: {nxt(runs['morning'])} · reminder: {nxt(runs['hours'])} · close: {close}")
+            nxt = lambda v: v.rsplit(" ", 1)[0] if v != "off" else _("off")
+            close = f"{self.close_at:%a %H:%M}" if self.close_at else _("off")
+            self.sched_status.set_label(_("saved · next open: {open} · reminder: {reminder} · close: {close}").format(
+                open=nxt(runs["morning"]), reminder=nxt(runs["hours"]), close=close))
 
         # systemctl kjøres i bakgrunnstråden, så vinduet ikke henger om systemd svarer tregt
         self.db.submit(schedule.apply_timers, sch, callback=done)
@@ -1013,37 +1026,39 @@ class Widget(Adw.ApplicationWindow):
         day = self.past_day()
         self.past_save_btn.set_sensitive(False)  # låst til dagens verdier er hentet, så de ikke lagres på feil dag
         if day == self.day:
-            self.past_status.set_label("Today: use the hours field in the list.")
+            self.past_status.set_label(_("Today: use the hours field in the list."))
             return
-        self.past_status.set_label("loading…")
+        self.past_status.set_label(_("loading…"))
 
         def show(result, err):
             if err or day != self.past_day():
-                self.past_status.set_label(f"could not read – {err}" if err else "")
+                self.past_status.set_label(_("could not read – {err}").format(err=err) if err else "")
                 return
             self.past_hours.set_value(result["hours"] or 0)
             self.past_off.set_active(result["day_off"])
-            logged = "not logged" if result["hours"] is None else f"logged {result['hours']:g} h"
-            self.past_status.set_label(f"{day:%a %d %b}: {logged} · expected {db.expected_for(day, result['day_off']):g} h")
+            logged = _("not logged") if result["hours"] is None else _("logged {h} h").format(h=f"{result['hours']:g}")
+            self.past_status.set_label(_("{day}: {logged} · expected {h} h").format(
+                day=f"{day:%a %d %b}", logged=logged, h=f"{db.expected_for(day, result['day_off']):g}"))
             self.past_save_btn.set_sensitive(True)
 
         self.db.submit(db.get_hours, day, callback=show)
 
-    def on_past_save(self, _):
+    def on_past_save(self, _widget):
         day = self.past_day()
         if day == self.day:
             return
         hours, off = self.past_hours.get_value(), self.past_off.get_active()
 
-        def done(_, err):
-            self.past_status.set_label(f"not saved – {err}" if err else f"saved {hours:g} h for {day:%a %d %b}")
+        def done(_result, err):
+            self.past_status.set_label(_("not saved – {err}").format(err=err) if err
+                                       else _("saved {h} h for {day}").format(h=f"{hours:g}", day=f"{day:%a %d %b}"))
             self.update_hours()
 
         self.db.submit(db.set_hours, day, hours, off, callback=done)
 
     def item_title(self, key):
         if key in self.items:
-            return dict((k, t) for k, t, _ in ITEMS)[key]
+            return _(dict((k, t) for k, t, _d in ITEMS)[key])
         return next(r["text"] for r in self.state["routine"] if f"r:{r['id']}" == key)
 
     def render_settings(self):
@@ -1057,7 +1072,7 @@ class Widget(Adw.ApplicationWindow):
             title = label(self.item_title(key), "detail", wrap=True)
             title.set_hexpand(True)
             row.append(title)
-            btn = Gtk.Button(label="delete", valign=Gtk.Align.CENTER)
+            btn = Gtk.Button(label=_("delete"), valign=Gtk.Align.CENTER)
             btn.add_css_class("flat")
             btn.connect("clicked", self.on_delete_clicked, key)
             row.append(btn)
@@ -1070,7 +1085,7 @@ class Widget(Adw.ApplicationWindow):
             title = label(self.item_title(key), "detail", "muted", wrap=True)
             title.set_hexpand(True)
             row.append(title)
-            btn = Gtk.Button(label="restore", valign=Gtk.Align.CENTER)
+            btn = Gtk.Button(label=_("restore"), valign=Gtk.Align.CENTER)
             btn.add_css_class("flat")
             btn.connect("clicked", self.on_restore, key)
             row.append(btn)
@@ -1078,10 +1093,10 @@ class Widget(Adw.ApplicationWindow):
 
     def on_delete_clicked(self, btn, key):
         # Første klikk: be om bekreftelse i 3 sekunder. Andre klikk: slett.
-        if btn.get_label() != "sure?":
-            btn.set_label("sure?")
+        if btn.get_label() != _("sure?"):
+            btn.set_label(_("sure?"))
             btn.add_css_class("danger")
-            GLib.timeout_add_seconds(3, lambda: (btn.set_label("delete"), btn.remove_css_class("danger"), False)[-1])
+            GLib.timeout_add_seconds(3, lambda: (btn.set_label(_("delete")), btn.remove_css_class("danger"), False)[-1])
             return
         if key in self.items:
             self.state["hidden"] = self.state["hidden"] + [key]  # faste punkter skjules, kan gjenopprettes
@@ -1166,7 +1181,7 @@ class Widget(Adw.ApplicationWindow):
                 for b in others:
                     b.set_active(False)
                 self.switching = False
-        self.side_btn.set_label("plan ◂" if self.side_btn.get_active() else "plan ▸")
+        self.side_btn.set_label(_("plan ◂") if self.side_btn.get_active() else _("plan ▸"))
         if btn.get_active() and others:
             return
         self.show_side(btn.get_active())
@@ -1225,7 +1240,7 @@ class Widget(Adw.ApplicationWindow):
         for i, m in enumerate(self.state["meetings"]):
             box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
             head = Gtk.Box(spacing=4)
-            name = Gtk.Entry(text=m["name"], placeholder_text="10:00 sprint review", hexpand=True)
+            name = Gtk.Entry(text=m["name"], placeholder_text=_("10:00 sprint review"), hexpand=True)
             name.connect("changed", lambda e, m=m: (m.__setitem__("name", e.get_text()), self.save()))
             head.append(name)
             rm = Gtk.Button(label="×")
@@ -1234,8 +1249,8 @@ class Widget(Adw.ApplicationWindow):
             head.append(rm)
             box.append(head)
             for j, p in enumerate(PREP):
-                cb = Gtk.CheckButton(label=p, active=j < len(m["done"]) and bool(m["done"][j]))
-                set_struck(cb.get_last_child(), p, cb.get_active())
+                cb = Gtk.CheckButton(label=_(p), active=j < len(m["done"]) and bool(m["done"][j]))
+                set_struck(cb.get_last_child(), _(p), cb.get_active())
                 cb.connect("toggled", self.on_prep_toggled, m, j)
                 box.append(cb)
             self.meeting_box.append(box)
@@ -1246,7 +1261,7 @@ class Widget(Adw.ApplicationWindow):
         self.save()
 
     def on_prep_toggled(self, cb, m, j):
-        set_struck(cb.get_last_child(), PREP[j], cb.get_active())
+        set_struck(cb.get_last_child(), _(PREP[j]), cb.get_active())
         self.cheer(cb)
         m["done"] += [False] * (j + 1 - len(m["done"]))
         m["done"][j] = cb.get_active()
@@ -1288,11 +1303,11 @@ class App(Adw.Application):
     def set_theme(self, name):
         name = name if name in [t[0] for t in THEMES] else "system"
         self.theme = name
-        _, icon, scheme = next(t for t in THEMES if t[0] == name)
+        _name, icon, scheme = next(t for t in THEMES if t[0] == name)
         Adw.StyleManager.get_default().set_color_scheme(scheme)
         if win := getattr(self, "win", None):
             win.theme_btn.set_label(icon)
-            win.theme_btn.set_tooltip_text(f"Theme: {name}")
+            win.theme_btn.set_tooltip_text(_("Theme: {name}").format(name=_(name)))
         self.apply_colors()
 
     def cycle_theme(self):

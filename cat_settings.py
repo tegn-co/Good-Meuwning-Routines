@@ -10,10 +10,11 @@ gi.require_version("Gtk", "4.0")
 from gi.repository import Gdk, Gtk  # noqa: E402
 
 import cat
+from i18n import _
 
 
 def label(text, *classes):
-    lbl = Gtk.Label(label=text, xalign=0, wrap=True)
+    lbl = Gtk.Label(label=_(text), xalign=0, wrap=True)
     for c in classes:
         lbl.add_css_class(c)
     return lbl
@@ -37,7 +38,8 @@ class CatSettings(Gtk.Box):
 
         head = Gtk.Box(margin_bottom=6)
         head.append(label("cat", "big"))
-        reset = Gtk.Button(label="reset", hexpand=True, halign=Gtk.Align.END, tooltip_text="Back to orange tabby and default phrases")
+        reset = Gtk.Button(label=_("reset"), hexpand=True, halign=Gtk.Align.END,
+                           tooltip_text=_("Back to orange tabby and default phrases"))
         reset.add_css_class("flat")
         reset.connect("clicked", self.on_reset)
         head.append(reset)
@@ -45,7 +47,7 @@ class CatSettings(Gtk.Box):
 
         # --- Rase ---
         self.append(label("breed", "num"))
-        self.breed = Gtk.DropDown.new_from_strings(list(cat.BREEDS) + ["custom"])
+        self.breed = Gtk.DropDown.new_from_strings([_(b) for b in cat.BREEDS] + [_("custom")])
         self.breed.connect("notify::selected", self.on_breed)
         self.append(self.breed)
 
@@ -57,7 +59,7 @@ class CatSettings(Gtk.Box):
         self.color_btns = {}
         for row, (key, name) in enumerate(cat.PARTS):
             grid.attach(label(name, "detail"), 0, row, 1, 1)
-            btn = Gtk.ColorDialogButton(dialog=Gtk.ColorDialog(with_alpha=False, title=f"Cat {name}"),
+            btn = Gtk.ColorDialogButton(dialog=Gtk.ColorDialog(with_alpha=False, title=_("Cat {part}").format(part=_(name))),
                                         hexpand=True, halign=Gtk.Align.END)
             btn.connect("notify::rgba", self.on_color, key)
             grid.attach(btn, 1, row, 1, 1)
@@ -71,7 +73,7 @@ class CatSettings(Gtk.Box):
         self.append(label("Unlocked by finishing the whole list several working days in a row.", "detail", "muted"))
         self.wear_checks = {}
         for key, days, name in cat.UNLOCKS:
-            cb = Gtk.CheckButton(label=name)
+            cb = Gtk.CheckButton(label=_(name))
             cb.add_css_class("detail")
             cb.connect("toggled", self.on_wear, key)
             self.append(cb)
@@ -85,7 +87,7 @@ class CatSettings(Gtk.Box):
         self.append(label("Separate options with | to pick one at random. Leave empty for just a ♥.", "detail", "muted"))
         self.phrase_entries = {}
         for key, when in cat.EVENTS:
-            self.append(label(f"when {when}", "detail", "muted"))
+            self.append(label(_("when {event}").format(event=_(when)), "detail", "muted"))
             entry = Gtk.Entry()
             entry.connect("changed", self.on_phrase, key)
             self.append(entry)
@@ -110,7 +112,7 @@ class CatSettings(Gtk.Box):
         for key, (cb, days, name) in self.wear_checks.items():
             unlocked = key in cat.UNLOCKED
             cb.set_sensitive(unlocked)
-            cb.set_label(name if unlocked else f"{name} – {days} days in a row")
+            cb.set_label(_(name) if unlocked else _("{name} – {days} days in a row").format(name=_(name), days=days))
             cb.set_active(unlocked and cat.SETTINGS.get("wear", {}).get(key, True))
         self.updating = False
 
@@ -124,7 +126,7 @@ class CatSettings(Gtk.Box):
         cat.save_cat_settings()
         self.title_cat.queue_draw()
 
-    def on_breed(self, dropdown, _):
+    def on_breed(self, dropdown, _pspec):
         if self.updating:
             return
         names = list(cat.BREEDS)
@@ -135,7 +137,7 @@ class CatSettings(Gtk.Box):
         cat.COLORS.update(cat.BREEDS[names[i]])
         cat.set_shape(cat.BREED_SHAPES.get(names[i], "normal"))
         self.load_into_ui()
-        self.title_cat.say(names[i] + "!")  # liten bekreftelse fra katten
+        self.title_cat.say(_("{breed}!").format(breed=_(names[i])))  # liten bekreftelse fra katten
         self.changed()
 
     def on_color(self, btn, _, key):

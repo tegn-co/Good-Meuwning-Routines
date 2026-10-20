@@ -39,6 +39,7 @@ gi.require_version("Graphene", "1.0")
 from gi.repository import GLib, Graphene, Gtk, Pango, PangoCairo  # noqa: E402
 
 from db import CONFIG_DIR  # noqa: E402  (samme innstillingsmappe som resten av appen, følger XDG_CONFIG_HOME)
+from i18n import _  # noqa: E402
 
 PX = 2  # skjermpiksler per sprite-piksel
 FPS = 24  # oppdateringer i sekundet når katten beveger seg (jevnt nok for pikselgrafikk)
@@ -49,7 +50,7 @@ _SURFACES = {}  # ferdigtegnede sprites/bokstaver, så hvert bilde bare limes in
 SWITCH_MINUTES = 15
 ANIMATIONS = ["walk", "play", "sleep", "sit", "jump", "climb", "butterfly", "groom", "stretch"]
 LUNCH = (11 * 60, 12 * 60)  # lunsj fra–til i minutter etter midnatt (settes fra ⚙ → schedule)
-TITLE = "good morning"  # standardtittel; TitleCat(title=...) kan bruke en annen
+TITLE = _("good morning")  # standardtittel; TitleCat(title=...) kan bruke en annen
 # --- Utseende og replikker (kan endres i katteinnstillingene, lagres i CAT_FILE) ---
 CAT_FILE = CONFIG_DIR / "cat.json"
 # Delene av katten som kan farges: nøkkel i spritene, navn i innstillingene
@@ -75,8 +76,8 @@ EVENTS = [
     ("break", "time for a break"),
     ("focus", "the break is over"),
 ]
-PHRASES = {"check": "good job!", "all_done": "all done!", "click": "",
-           "start": "let's go!", "break": "break time!", "focus": "focus time!"}
+PHRASES = {"check": _("good job!"), "all_done": _("all done!"), "click": "",
+           "start": _("let's go!"), "break": _("break time!"), "focus": _("focus time!")}
 DEFAULT_PHRASES = dict(PHRASES)
 
 COLORS = dict(BREEDS["orange tabby"], c="#5aa9e6", f="#9a5b2e",  # c/f = matskåla
@@ -950,7 +951,7 @@ class TitleCat(Gtk.DrawingArea):
             if part < 2 / 3 and phase < 0.7:  # ingen «nom» når skåla er tom
                 cr.set_source_rgba(*rgb(pal["muted"]), 1 - phase / 0.7)
                 cr.move_to(bx + 22 + phase * 8, top - 30 - phase * 18)
-                nom = self.layout(cr, "nom")
+                nom = self.layout(cr, _("nom"))
                 nom.set_font_description(Pango.FontDescription.from_string("Silkscreen 8px"))
                 PangoCairo.show_layout(cr, nom)
 
@@ -1053,7 +1054,7 @@ class CatRoamer(Gtk.DrawingArea):
         self.play_until = now + 60
         self.play_wait, self.play_catches = 0.0, 0
         self.title.away = True
-        self.title.say(random.choice(["playtime!", "mrrrow!", "let's play!"]), 2)
+        self.title.say(_(random.choice(["playtime!", "mrrrow!", "let's play!"])), 2)
         x, y = self.anchor()
         angle = self.frame_pose(self.s)[2] if self.mode == "frame" else 0.0
         self.enter = 0.0
@@ -1179,7 +1180,7 @@ class CatRoamer(Gtk.DrawingArea):
                         self.play_catches += 1  # landet på pekeren
                         self.play_wait = 0.8
                         if self.play_catches % 3 == 1:
-                            self.title.say(random.choice(["got it!", "pounce!", "mrrp!", "gotcha!"]), 1.2)
+                            self.title.say(_(random.choice(["got it!", "pounce!", "mrrp!", "gotcha!"])), 1.2)
                 if self.mode == "title":
                     self.title.away = False
                     self.title.kick(self.title.x + 10 * PX, 120)  # landing på bokstavene

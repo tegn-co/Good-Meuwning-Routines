@@ -2,13 +2,24 @@
 # Kjøres av systemd-timerne: viser et varsel og åpner vinduet.
 #   morgen-todo-remind morning   – morgenlisten
 #   morgen-todo-remind hours     – påminnelse om timeføring
+# Norsk hvis det er valgt i appen (⚙ → language), ellers ut fra systemspråket
+CONFIG="${XDG_CONFIG_HOME:-$HOME/.config}/morgen-todo/config.json"
+if grep -q '"language": "nb"' "$CONFIG" 2>/dev/null; then NB=1
+elif grep -q '"language": "en"' "$CONFIG" 2>/dev/null; then NB=
+else case "${LANGUAGE:-${LC_ALL:-${LC_MESSAGES:-$LANG}}}" in nb*|nn*|no*) NB=1 ;; *) NB= ;; esac
+fi
+
 case "$1" in
   hours)
-    notify-send -u critical -i no.zivid.MorgenTodo "⏱ Log your hours" "How many hours did you work today?" 2>/dev/null
+    if [ -n "$NB" ]; then T="⏱ Før timene dine"; B="Hvor mange timer jobbet du i dag?"
+    else T="⏱ Log your hours"; B="How many hours did you work today?"; fi
+    notify-send -u critical -i no.zivid.MorgenTodo "$T" "$B" 2>/dev/null
     /usr/bin/morgen-todo --hours >/dev/null 2>&1 &
     ;;
   *)
-    notify-send -i no.zivid.MorgenTodo "Good morning ☀️" "Time for your morning routine." 2>/dev/null
+    if [ -n "$NB" ]; then T="God morgen ☀️"; B="Tid for morgenrutinen."
+    else T="Good morning ☀️"; B="Time for your morning routine."; fi
+    notify-send -i no.zivid.MorgenTodo "$T" "$B" 2>/dev/null
     /usr/bin/morgen-todo >/dev/null 2>&1 &
     ;;
 esac

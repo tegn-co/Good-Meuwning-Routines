@@ -15,6 +15,7 @@ gi.require_version("Gtk", "4.0")
 from gi.repository import GLib, Gtk  # noqa: E402
 
 import db  # noqa: E402
+from i18n import _  # noqa: E402
 
 # Standardverdier; brukerens egne ligger i SETTINGS_FILE. "rounds" = lang pause etter så mange fokusøkter
 DEFAULTS = {"focus": 25, "short": 5, "long": 15, "rounds": 4}
@@ -44,7 +45,7 @@ def notify(title, body):
 
 
 def label(text, *classes):
-    lbl = Gtk.Label(label=text, xalign=0)
+    lbl = Gtk.Label(label=_(text), xalign=0)
     for c in classes:
         lbl.add_css_class(c)
     return lbl
@@ -93,7 +94,7 @@ class PomodoroPanel(Gtk.Box):
         self.append(self.sessions)
 
         # Innstillinger (skjult til du trykker «settings»)
-        toggle = Gtk.ToggleButton(label="settings ▸", halign=Gtk.Align.CENTER, margin_top=6)
+        toggle = Gtk.ToggleButton(label=_("settings ▸"), halign=Gtk.Align.CENTER, margin_top=6)
         toggle.add_css_class("flat")
         grid = Gtk.Grid(row_spacing=6, column_spacing=12, margin_top=6, halign=Gtk.Align.CENTER)
         for row, (key, text, lo, hi) in enumerate(FIELDS):
@@ -104,7 +105,7 @@ class PomodoroPanel(Gtk.Box):
             grid.attach(spin, 1, row, 1, 1)
         revealer = Gtk.Revealer(child=grid, transition_type=Gtk.RevealerTransitionType.SLIDE_DOWN)
         toggle.connect("toggled", lambda b: (revealer.set_reveal_child(b.get_active()),
-                                             b.set_label("settings ▾" if b.get_active() else "settings ▸")))
+                                             b.set_label(_("settings ▾") if b.get_active() else _("settings ▸"))))
         self.append(toggle)
         self.append(revealer)
 
@@ -112,7 +113,7 @@ class PomodoroPanel(Gtk.Box):
         GLib.timeout_add(250, self.tick)
 
     def button(self, text, handler, *classes):
-        b = Gtk.Button(label=text)
+        b = Gtk.Button(label=_(text))
         b.add_css_class("pixel")
         for c in classes:
             b.add_css_class(c)
@@ -189,11 +190,11 @@ class PomodoroPanel(Gtk.Box):
             self.done_in_cycle += 1
             self.save_stats()
             nxt = "long" if self.done_in_cycle % self.settings["rounds"] == 0 else "short"
-            notify("🍅 Focus done", f"Time for a {self.settings[nxt]} min break.")
+            notify(_("🍅 Focus done"), _("Time for a {n} min break.").format(n=self.settings[nxt]))
             self.set_phase(nxt, autostart=True)  # pausen starter av seg selv
             self.cat.react("break", 3)
         else:
-            notify("🍅 Break over", "Ready for the next focus session?")
+            notify(_("🍅 Break over"), _("Ready for the next focus session?"))
             self.set_phase("focus", autostart=False)  # fokus starter når du trykker start
             self.cat.react("focus", 3)
 
@@ -216,9 +217,9 @@ class PomodoroPanel(Gtk.Box):
         )
         rounds = self.settings["rounds"]
         dots = "■" * (self.done_in_cycle % rounds) + "□" * (rounds - self.done_in_cycle % rounds)
-        self.sessions.set_label(f"{dots}   today: {self.today}")
-        self.phase_lbl.set_label(PHASE_NAMES[self.phase] + ("" if self.running() else " · paused" if self.started() else ""))
-        self.start_btn.set_label("pause" if self.running() else "start")
+        self.sessions.set_label(_("{dots}   today: {n}").format(dots=dots, n=self.today))
+        self.phase_lbl.set_label(_(PHASE_NAMES[self.phase]) + ("" if self.running() else _(" · paused") if self.started() else ""))
+        self.start_btn.set_label(_("pause") if self.running() else _("start"))
         # Katten følger pomodoroen mens den går; ellers vanlige animasjoner
         self.cat.mode = CAT_MODE[self.phase] if self.running() else None
         if self.on_change:

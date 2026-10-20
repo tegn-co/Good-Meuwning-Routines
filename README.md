@@ -24,6 +24,7 @@ eats lunch, chases the cursor and cheers when you check things off.
 | 🐈 **The cat** | Seven breeds (plus a fluffy Maine Coon), every color editable, and you decide what it says. |
 | 🕗 **Your schedule** | Choose when the list opens, when you're reminded, which weekdays, when it saves & closes, and when the cat has lunch. |
 | 🌗 **Light & dark** | Follows your system theme, or pick one. |
+| 🇳🇴 **English & Norwegian** | Follows your system language, or pick one under ⚙. |
 
 ## Meet the cat
 
