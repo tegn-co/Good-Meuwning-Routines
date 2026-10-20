@@ -163,7 +163,7 @@ class Widget(Adw.ApplicationWindow):
         # Én animasjon styrer vindusbredden, så panelet glir ut/inn sammen med vinduskanten
         self.side_anim = Adw.TimedAnimation.new(
             self, MAIN_W, MAIN_W + SIDE_W, 220,
-            Adw.CallbackAnimationTarget.new(lambda w: self.set_default_size(round(w), self.get_height())),
+            Adw.CallbackAnimationTarget.new(self.resize_to_width),
         )
         self.side_anim.set_easing(Adw.Easing.EASE_OUT_CUBIC)
         self.side_anim.connect("done", self.on_side_anim_done)
@@ -288,6 +288,8 @@ class Widget(Adw.ApplicationWindow):
         self.connect("close-request", self.on_close)
         self.db = db.Worker()
         self.loaded = False  # ingenting lagres før dagens data er lest (ellers kan tom liste overskrive alt)
+        self.size_delta = 0  # standardstørrelse minus synlig størrelse (se resize_to_width)
+        self.connect("map", lambda *_: GLib.timeout_add(150, self.fix_start_size))
         self.day = date.today()
         self.load()
 
@@ -935,9 +937,27 @@ class Widget(Adw.ApplicationWindow):
             return
         self.show_side(btn.get_active())
 
+    def fix_start_size(self):
+        """Første gang vinduet vises: sørg for at den synlige størrelsen blir MAIN_W × MAIN_H også der
+        standardstørrelsen inkluderer usynlige kanter (X11 uten skygger)."""
+        dw, dh = self.get_default_size()
+        self.size_delta = max(0, dw - self.get_width())
+        dy = max(0, dh - self.get_height())
+        if (self.size_delta or dy) and not self.side.get_visible():
+            self.set_default_size(MAIN_W + self.size_delta, MAIN_H + dy)
+        return False
+
+    def resize_to_width(self, width):
+        """Sett synlig bredde. «Standardstørrelsen» GTK bruker kan være større enn det synlige vinduet
+        (X11 uten skygger: 10 px), så forskjellen legges til, og høyden beholdes som den er."""
+        dw, dh = self.get_default_size()
+        self.set_default_size(round(width) + self.size_delta, dh)
+
     def show_side(self, opening):
         # Åpne: vinduet vokser mot høyre. Lukke: vinduet krymper fra høyre mot venstre.
         self.side_anim.pause()
+        if self.get_mapped() and self.side_anim.get_state() != Adw.AnimationState.PLAYING:
+            self.size_delta = max(0, self.get_default_size()[0] - self.get_width())  # oppdater, f.eks. etter tema-/skjermbytte
         if opening:
             self.side.set_visible(True)
             self.scroll.set_hexpand(False)

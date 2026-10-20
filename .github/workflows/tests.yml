@@ -18,4 +18,4 @@ jobs:
           mkdir -p ~/.local/share/fonts && cp packaging/fonts/*.ttf ~/.local/share/fonts/ && fc-cache -f
 
       - name: Unit and app tests
-        run: xvfb-run -a dbus-run-session -- python3 -m unittest discover -s tests -t . -v
+        run: xvfb-run -a -s "-screen 0 1280x1024x24" dbus-run-session -- python3 -m unittest discover -s tests -t . -v
