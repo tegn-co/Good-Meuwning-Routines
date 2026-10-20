@@ -101,6 +101,21 @@ class AppTest(unittest.TestCase):
             updates.newer_available = self.real_newer
 
         @step
+        def weather_row(w):
+            import weather as wmod
+            check(not w.weather_row.get_visible(), "weather shown without a chosen place")
+            self.real_fetch = wmod.fetch
+            wmod.fetch = lambda lat, lon: {"temp": 7, "kind": "rain", "day_kind": "rain", "min": 3, "max": 9, "rain": 80}
+            w.choose_place({"name": "Oslo, Norge", "lat": 59.9, "lon": 10.7})
+
+        @step
+        def weather_shown(w):
+            import weather as wmod
+            check(w.weather_row.get_visible() and w.weather_lbl.get_label() == "7° · 3–9° · rain 80%",
+                  f"weather row: {w.weather_lbl.get_label()!r}")
+            wmod.fetch = self.real_fetch
+
+        @step
         def side_panels(w):
             for b in (w.cat_btn, w.settings_btn, w.pomo_btn, w.side_btn):
                 b.set_active(True)

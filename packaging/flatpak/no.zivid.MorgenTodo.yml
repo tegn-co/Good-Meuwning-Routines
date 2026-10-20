@@ -10,11 +10,12 @@ finish-args:
   - --socket=wayland
   - --socket=fallback-x11
   - --device=dri
+  - --share=network  # været (open-meteo.com)
 modules:
   - name: morgen-todo
     buildsystem: simple
     build-commands:
-      - install -Dm644 -t /app/share/morgen-todo widget.py cat.py cat_settings.py pomodoro.py db.py schedule.py onboarding.py updates.py i18n.py
+      - install -Dm644 -t /app/share/morgen-todo widget.py cat.py cat_settings.py pomodoro.py db.py schedule.py onboarding.py updates.py i18n.py weather.py
       - python3 -m compileall -q /app/share/morgen-todo
       - install -Dm755 packaging/flatpak/morgen-todo.sh /app/bin/morgen-todo
       - install -Dm644 packaging/files/no.zivid.MorgenTodo.desktop /app/share/applications/no.zivid.MorgenTodo.desktop

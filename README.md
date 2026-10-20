@@ -20,6 +20,7 @@ eats lunch, chases butterflies and cheers when you check things off.
 | ☀️ **Morning checklist** | Email, Jira, today's meetings, meeting prep and a plan for the day – plus your own routine items that come back every day. Drag the numbers to reorder; delete items under ⚙ (it asks twice). |
 | 📝 **Plan for the day** | Write tasks as `- task` lines and check them off in the side panel. Unfinished tasks move to tomorrow. |
 | ⏱ **Hours & overtime** | A reminder at 15:00 to log your hours; the overtime balance adds up for you. Weekends and days off expect 0 h, and you can fix past days under ⚙. |
+| 🌦 **Weather** | Pick your city and today's weather shows under the date – and the cat tells you to take an umbrella. |
 | 🔥 **Streaks** | Finish the whole list several working days in a row – the cat notices and unlocks things to wear. |
 | 🍅 **Pomodoro** | Focus timer with adjustable lengths. The cat sleeps while you work and plays in the breaks. |
 | 🐈 **The cat** | Eight breeds including a fluffy Maine Coon, every color editable, and you decide what it says. |
@@ -110,7 +111,10 @@ Everything can be changed later under **⚙**, and the tutorial is there too.
 
 ## Your data stays yours
 
-Every user starts with a fresh, local database – nothing is shared or uploaded.
+Every user starts with a fresh, local database – nothing is shared or uploaded. The only things the
+app ever fetches are the weather (only the coordinates of the city you picked are sent to
+[open-meteo.com](https://open-meteo.com), and only if you pick one) and, for the .deb, the latest
+version number from GitHub.
 
 | What | .deb | Flatpak |
 |---|---|---|
@@ -170,6 +174,7 @@ flatpak-builder --user --install build packaging/flatpak/no.zivid.MorgenTodo.yml
 | `onboarding.py` | first-start tutorial and setup |
 | `updates.py` | checks GitHub for new versions and installs them |
 | `i18n.py` | English and Norwegian |
+| `weather.py` | today's weather from Open-Meteo, with pixel icons |
 | `tests/` | unit and app tests |
 | `packaging/` | .deb build script, Flatpak manifest, icon generator, fonts |
 | `docs/` | README art |

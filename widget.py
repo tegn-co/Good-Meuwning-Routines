@@ -24,6 +24,7 @@ import db  # noqa: E402
 import schedule  # noqa: E402
 from onboarding import Onboarding  # noqa: E402
 import updates  # noqa: E402
+import weather  # noqa: E402
 from i18n import LANG, LANGUAGES, _  # noqa: E402
 
 SAVE_DELAY = 10  # sekunder uten endringer før lagring
@@ -211,6 +212,14 @@ class Widget(Adw.ApplicationWindow):
         self.streak_lbl = label("", "detail", "muted", wrap=True)  # «3 days in a row»
         self.streak_lbl.set_visible(False)
         left.append(self.streak_lbl)
+        # Været (vises når et sted er valgt under ⚙ → weather)
+        self.weather_row = Gtk.Box(spacing=6, visible=False, margin_top=2)
+        self.weather_icon = Gtk.DrawingArea(content_width=26, content_height=20)
+        self.weather_icon.set_draw_func(self.draw_weather_icon)
+        self.weather_row.append(self.weather_icon)
+        self.weather_lbl = label("", "detail", "muted", wrap=True)
+        self.weather_row.append(self.weather_lbl)
+        left.append(self.weather_row)
         meta.append(left)
         self.blocks = Gtk.Label(use_markup=True, hexpand=True, xalign=1)
         self.blocks.add_css_class("blocks")
@@ -325,6 +334,9 @@ class Widget(Adw.ApplicationWindow):
 
         self.apply_schedule(schedule.load())
         GLib.timeout_add_seconds(5, self.check_for_update)  # og deretter én gang om dagen via check_clock
+        self.show_weather(db.load_config().get("weather_cache", {}).get("w"))  # siste kjente vær med en gang
+        GLib.timeout_add_seconds(2, lambda: self.refresh_weather() and False)
+        GLib.timeout_add_seconds(30 * 60, self.refresh_weather)
         # Sjekk veggklokka hvert 30. sekund (en vanlig timer stopper når maskinen sover)
         GLib.timeout_add_seconds(30, self.check_clock)
 
@@ -727,6 +739,8 @@ class Widget(Adw.ApplicationWindow):
         self.backup_status = label("", "detail", "muted", wrap=True)
         page.append(self.backup_status)
 
+        self.build_weather_settings(page)
+
         # Språk
         heading = label("language", "num")
         heading.set_margin_top(14)
@@ -820,6 +834,120 @@ class Widget(Adw.ApplicationWindow):
         if self.loaded:
             self.on_close(None)
         os.execv(sys.executable, [sys.executable, str(Path(__file__).resolve())])
+
+    # --- vær ---
+    def refresh_weather(self):
+        place = db.load_config().get("weather_place")
+        if not place:
+            self.show_weather(None)
+            return True
+
+        def done(w, err):
+            if err or not w:
+                return  # behold det siste kjente været
+            db.update_config(weather_cache={"date": str(date.today()), "w": w})
+            self.show_weather(w)
+            self.weather_remark(w)
+
+        threading.Thread(target=lambda: self.fetch(lambda: weather.fetch(place["lat"], place["lon"]), done),
+                         daemon=True).start()
+        return True
+
+    def show_weather(self, w):
+        self.weather = w if db.load_config().get("weather_place") else None
+        self.weather_row.set_visible(bool(self.weather))
+        if not self.weather:
+            return
+        text = f"{w['temp']}° · {w['min']}–{w['max']}°"
+        if (w.get("rain") or 0) >= 20:
+            text += " · " + _("rain {p}%").format(p=w["rain"])
+        self.weather_lbl.set_label(text)
+        self.weather_icon.queue_draw()
+
+    def draw_weather_icon(self, area, cr, width, height):
+        if not getattr(self, "weather", None):
+            return
+        icon = catmod.outline(weather.ICONS[self.weather["kind"]])
+        px = 2
+        ox = (width - len(icon[0]) * px) // 2
+        oy = (height - len(icon) * px) // 2
+        for r, row in enumerate(icon):
+            for c, ch in enumerate(row):
+                if ch != ".":
+                    cr.set_source_rgb(*catmod.rgb(weather.COLORS[ch]))
+                    cr.rectangle(ox + c * px, oy + r * px, px, px)
+                    cr.fill()
+
+    def weather_remark(self, w):
+        """Én gang om morgenen: katten sier noe om dagens vær (paraply, snø, fin dag)."""
+        today = str(date.today())
+        if not 5 <= datetime.now().hour < 12 or db.load_config().get("weather_remark") == today:
+            return
+        db.update_config(weather_remark=today)
+        if text := weather.remark(w):
+            self.title_cat.say(_(text), 4)
+
+    def build_weather_settings(self, page):
+        heading = label("weather", "num")
+        heading.set_margin_top(14)
+        page.append(heading)
+        self.place_lbl = label("", "detail", "muted", wrap=True)
+        page.append(self.place_lbl)
+        row = Gtk.Box(spacing=6)
+        self.place_entry = Gtk.Entry(placeholder_text=_("city, e.g. Oslo"), hexpand=True)
+        self.place_entry.connect("activate", self.on_place_search)
+        row.append(self.place_entry)
+        find = Gtk.Button(label=_("search"))
+        find.add_css_class("flat")
+        find.connect("clicked", self.on_place_search)
+        row.append(find)
+        page.append(row)
+        self.place_results = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+        page.append(self.place_results)
+        self.show_place()
+
+    def show_place(self):
+        place = db.load_config().get("weather_place")
+        self.place_lbl.set_label(_("showing weather for {place}").format(place=place["name"]) if place
+                                 else _("Pick a city to show the weather under the date. Only its coordinates are sent to open-meteo.com."))
+
+    def on_place_search(self, _widget):
+        query = self.place_entry.get_text().strip()
+        if not query:
+            return
+        while child := self.place_results.get_first_child():
+            self.place_results.remove(child)
+        self.place_results.append(label("searching…", "detail", "muted"))
+
+        def done(results, err):
+            while child := self.place_results.get_first_child():
+                self.place_results.remove(child)
+            if err or not results:
+                self.place_results.append(label(_("no places found") if not err else
+                                                _("could not search – {err}").format(err=err), "detail", "muted"))
+                return
+            for r in results:
+                name = ", ".join(x for x in (r["name"], r["region"], r["country"]) if x)
+                b = Gtk.Button(label=name, halign=Gtk.Align.START)
+                b.add_css_class("flat")
+                b.connect("clicked", lambda _b, r=r, name=name: self.choose_place(dict(r, name=name)))
+                self.place_results.append(b)
+            if db.load_config().get("weather_place"):
+                off = Gtk.Button(label=_("turn weather off"), halign=Gtk.Align.START)
+                off.add_css_class("flat")
+                off.connect("clicked", lambda _b: self.choose_place(None))
+                self.place_results.append(off)
+
+        lang = "nb" if LANG == "nb" else "en"
+        threading.Thread(target=lambda: self.fetch(lambda: weather.search(query, lang), done), daemon=True).start()
+
+    def choose_place(self, place):
+        db.update_config(weather_place=place, weather_cache=None)
+        while child := self.place_results.get_first_child():
+            self.place_results.remove(child)
+        self.place_entry.set_text("")
+        self.show_place()
+        self.refresh_weather()
 
     # --- oppdateringer ---
     def check_for_update(self):
