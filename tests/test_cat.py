@@ -28,7 +28,7 @@ class CatTest(unittest.TestCase):
 
     def test_every_animation_ticks_and_draws(self):
         for anim in cat.ANIMATIONS + ["eat"]:
-            for mode in (None, "eat"):  # "eat" = lang pomodoro-pause, også utenfor lunsj
+            for mode in (None, "eat"):  # "eat" = long pomodoro break, also outside lunch
                 c = cat.TitleCat(lambda: PAL, forced=None if mode else anim)
                 c.mode = mode
                 surf = cairo.ImageSurface(cairo.FORMAT_ARGB32, 320, 86)
@@ -48,7 +48,7 @@ class CatTest(unittest.TestCase):
         surf = cairo.ImageSurface(cairo.FORMAT_ARGB32, 320, 86)
         c.draw(None, cairo.Context(surf), 320, 86)
         c.tick(None, None)
-        c.draw(None, cairo.Context(surf), 320, 86)  # krasjet før v1.0.4
+        c.draw(None, cairo.Context(surf), 320, 86)  # crashed before v1.0.4
 
 
 if __name__ == "__main__":

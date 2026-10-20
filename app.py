@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Lite, flyttbart morgen-todo-vindu (GTK4). Lagrer i SQLite via db.py (se der for hvor databasen ligger)."""
+"""Small, movable morning-todo window (GTK4). Stores data in SQLite via database.py (see there for the DB location)."""
 import json
 import os
 import random
@@ -27,9 +27,9 @@ import updater  # noqa: E402
 import weather  # noqa: E402
 from translations import LANG, LANGUAGES, _  # noqa: E402
 
-SAVE_DELAY = 10  # sekunder uten endringer før lagring
-MAIN_H = 600  # vinduet starter alltid i MAIN_W × MAIN_H med sidepanelet lukket
-MAIN_W, SIDE_W = 360, 317  # bredde på hovedlisten og plan-panelet (inkl. marger og kant)
+SAVE_DELAY = 10  # seconds without changes before saving
+MAIN_H = 600  # the window always starts at MAIN_W x MAIN_H with the side panel closed
+MAIN_W, SIDE_W = 360, 317  # width of the main list and the side panel (incl. margins and border)
 
 ITEMS = [
     ("email", "Check email", ["Reply to anything urgent, flag the rest", "Add new tasks to today's plan"]),
@@ -77,7 +77,7 @@ button.flat { font-family: "Silkscreen"; font-size: 10px; color: @mt_muted; padd
 button.flat:hover { color: @mt_accent; background: transparent; }
 """
 
-# Fargepaletter for lys og mørk modus (brukes som @mt_* i CSS-en over)
+# Light and dark palettes (used as @mt_* in the CSS above)
 PALETTES = {
     "light": {"bg": "#f4f4f0", "fg": "#111111", "muted": "#8a8a85", "line": "#dcdcd6", "accent": "#ff4f1f"},
     "dark": {"bg": "#0e0e0e", "fg": "#ededea", "muted": "#6b6b66", "line": "#262624", "accent": "#ff6a3d"},
@@ -91,8 +91,7 @@ def palette():
 
 
 def set_strikethrough(lbl, text, on):
-    """Gjennomstreking settes i selve teksten (ikke via CSS), så den alltid forsvinner igjen når
-    avkryssingen fjernes – GTK tegnet ikke alltid om teksten når bare CSS-streken skulle bort."""
+    """Strike through via markup, not CSS: GTK didn't always redraw when only a CSS strike was removed."""
     escaped = GLib.markup_escape_text(text)
     lbl.set_markup(f"<s>{escaped}</s>" if on else escaped)
 
@@ -114,22 +113,21 @@ class MainWindow(Adw.ApplicationWindow):
         root = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
         root.add_css_class("bg")
         header = Adw.HeaderBar(show_title=False)
-        # Bytt mellom system / lys / mørk modus
+        # Cycles system / light / dark theme
         self.theme_btn = Gtk.Button()
         self.theme_btn.add_css_class("flat")
         self.theme_btn.connect("clicked", lambda _: app.cycle_theme())
         header.pack_start(self.theme_btn)
-        # Åpner/lukker pomodoro-panelet; viser gjenstående tid mens klokka går
+        # Toggles the pomodoro panel; shows the remaining time while the timer runs
         self.pomo_btn = Gtk.ToggleButton(label="pomo", tooltip_text=_("Pomodoro timer"))
         self.pomo_btn.add_css_class("flat")
         self.pomo_btn.connect("toggled", self.on_side_toggled, "pomo")
         header.pack_start(self.pomo_btn)
-        # Åpner/lukker katteinnstillingene
         self.cat_btn = Gtk.ToggleButton(label=_("cat"), tooltip_text=_("Customize the cat"))
         self.cat_btn.add_css_class("flat")
         self.cat_btn.connect("toggled", self.on_side_toggled, "cat")
         header.pack_start(self.cat_btn)
-        # Innstillinger: her slettes punkter (ikke i selve listen, så ingenting forsvinner ved et feiltrykk)
+        # Items are deleted in settings, not in the list itself, so nothing disappears on a misclick
         self.settings_btn = Gtk.ToggleButton(label="⚙", tooltip_text=_("Settings"))
         self.settings_btn.add_css_class("flat")
         self.settings_btn.connect("toggled", self.on_side_toggled, "settings")
@@ -142,10 +140,10 @@ class MainWindow(Adw.ApplicationWindow):
         main = Gtk.Box()
         main.append(scroll)
 
-        # --- Sidepanel med to sider: dagens plan og pomodoro-klokka ---
+        # --- Side panel: a stack of pages (plan, pomodoro, cat, settings) ---
         self.side_stack = Gtk.Stack(transition_type=Gtk.StackTransitionType.CROSSFADE, width_request=280,
                                     margin_start=18, margin_end=18)
-        # Plan: punkt 05 som todo-liste (linjer som starter med "-")
+        # Plan: item 05 as a todo list (lines starting with "-")
         side = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
         side_head = Gtk.Box(margin_bottom=12)
         side_head.append(label("today's plan", "big"))
@@ -158,27 +156,27 @@ class MainWindow(Adw.ApplicationWindow):
         side.append(self.plan_list)
         self.plan_hint = label("Write lines starting with - in 05 to add them here", "detail", "muted", wrap=True)
         side.append(self.plan_hint)
-        # EXTERNAL: panelet kan bli smalere enn innholdet, så vindusbredden alene bestemmer hvor mye som vises
+        # EXTERNAL: the panel may be narrower than its content, so the window width alone decides how much shows
         self.side = Gtk.ScrolledWindow(vexpand=True, hexpand=True, visible=False,
                                        hscrollbar_policy=Gtk.PolicyType.EXTERNAL)
         self.side_stack.add_named(side, "plan")
-        # Clamp: sidene får aldri mer enn panelets bredde, så lange tekster brytes i stedet for å sprenge panelet
+        # Clamp: pages never exceed the panel width, so long text wraps instead of widening the panel
         self.side.set_child(Adw.Clamp(child=self.side_stack, maximum_size=SIDE_W - 1, tightening_threshold=SIDE_W - 1))
         self.side.add_css_class("side")
         main.append(self.side)
-        # Én animasjon styrer vindusbredden, så panelet glir ut/inn sammen med vinduskanten
+        # One animation drives the window width, so the panel slides in/out with the window edge
         self.side_anim = Adw.TimedAnimation.new(
             self, MAIN_W, MAIN_W + SIDE_W, 220,
             Adw.CallbackAnimationTarget.new(self.resize_to_width),
         )
         self.side_anim.set_easing(Adw.Easing.EASE_OUT_CUBIC)
         self.side_anim.connect("done", self.on_side_anim_done)
-        # Katten tegnes i et gjennomsiktig lag over hele innholdet, så den kan klatre rundt rammen
+        # The cat is drawn on a transparent overlay above all content, so it can climb around the frame
         self.overlay = Gtk.Overlay(child=main)
         root.append(self.overlay)
         self.set_content(root)
 
-        # Banner når en nyere versjon finnes (se check_for_update)
+        # Banner shown when a newer version exists (see check_for_update)
         bar = Gtk.Box(spacing=6, margin_top=8)
         bar.add_css_class("planbox")
         self.update_lbl = label("", "detail", wrap=True)
@@ -195,10 +193,10 @@ class MainWindow(Adw.ApplicationWindow):
         self.update_bar = Gtk.Revealer(child=bar)
         body.append(self.update_bar)
 
-        # Tittelen «good morning» med pixel-katten som lever oppå bokstavene
+        # The "good morning" title, with the pixel cat living on top of the letters
         self.title_cat = TitleCat(palette, forced=cat)
         body.append(self.title_cat)
-        CatOverlay(self.title_cat, self.overlay)  # legger seg selv i overlay-et
+        CatOverlay(self.title_cat, self.overlay)  # adds itself to the overlay
         self.pomodoro = PomodoroPanel(self.title_cat, palette, on_change=self.on_pomodoro_change)
         self.side_stack.add_named(self.pomodoro, "pomo")
         self.cat_panel = CatPanel(self.title_cat)
@@ -206,13 +204,13 @@ class MainWindow(Adw.ApplicationWindow):
         self.side_stack.add_named(self.build_settings_page(), "settings")
 
         meta = Gtk.Box(margin_bottom=16)
-        left = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)  # dato, og streak på egen linje under
+        left = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)  # date, with the streak on its own line below
         self.date_lbl = label("", "muted", "detail")
         left.append(self.date_lbl)
-        self.streak_lbl = label("", "detail", "muted", wrap=True)  # «3 days in a row»
+        self.streak_lbl = label("", "detail", "muted", wrap=True)  # e.g. "3 days in a row"
         self.streak_lbl.set_visible(False)
         left.append(self.streak_lbl)
-        # Været (vises når et sted er valgt under ⚙ → weather)
+        # Weather (shown when a place is chosen under ⚙ → weather)
         self.weather_row = Gtk.Box(spacing=6, visible=False, margin_top=2)
         self.weather_icon = Gtk.DrawingArea(content_width=26, content_height=20)
         self.weather_icon.set_draw_func(self.draw_weather_icon)
@@ -226,12 +224,12 @@ class MainWindow(Adw.ApplicationWindow):
         meta.append(self.blocks)
         body.append(meta)
 
-        # Alle punktene (faste og rutine) ligger i én liste som kan sorteres ved å dra i nummeret
+        # All items (default and routine) share one list, reordered by dragging the number
         self.list_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
         body.append(self.list_box)
         self.items = {}
-        self.titles = {}  # tittel-etiketten til de faste punktene (gjennomstrekes når de er krysset av)
-        self.nums = {}  # nummer-etiketten per punkt (oppdateres når rekkefølgen endres)
+        self.titles = {}  # title labels of the default items (struck through when checked)
+        self.nums = {}  # number label per item (updated when the order changes)
         self.routine_widgets = {}
         for i, (key, text, details) in enumerate(ITEMS, 1):
             item = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
@@ -243,7 +241,7 @@ class MainWindow(Adw.ApplicationWindow):
             check = Gtk.CheckButton(hexpand=True, halign=Gtk.Align.END)
             check.connect("toggled", self.on_item_toggled, key)
             if key == "plan":
-                # Åpner/lukker sidepanelet med planpunktene; ligger i raden så den er synlig også når 05 er krysset av
+                # Toggles the plan side panel; lives in the row so it stays visible when 05 is checked
                 self.side_btn = Gtk.ToggleButton(label="plan ▸")
                 self.side_btn.add_css_class("flat")
                 self.side_btn.connect("toggled", self.on_side_toggled, "plan")
@@ -276,7 +274,7 @@ class MainWindow(Adw.ApplicationWindow):
             self.make_drop_target(item, key)
             self.items[key] = (item, check, extra)
 
-        # --- Egne rutinepunkter kommer tilbake hver dag; legges til her ---
+        # --- Custom routine items recur every day; added here ---
         add_row = Gtk.Box(spacing=10, margin_top=6, margin_bottom=10)
         add_row.append(label("+", "num"))
         self.new_todo = Gtk.Entry(placeholder_text=_("add to routine and press enter"), hexpand=True)
@@ -284,7 +282,7 @@ class MainWindow(Adw.ApplicationWindow):
         add_row.append(self.new_todo)
         body.append(add_row)
 
-        # --- Timeføring (påminnelse kl 15:00) ---
+        # --- Hours logging (reminder at 15:00) ---
         self.hours_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
         self.hours_box.add_css_class("hours")
         row = Gtk.Box(spacing=10)
@@ -295,7 +293,7 @@ class MainWindow(Adw.ApplicationWindow):
         self.hours.set_hexpand(True)
         self.hours.set_halign(Gtk.Align.END)
         self.hours.connect("value-changed", self.on_hours_changed)
-        # Enter fører timene selv om tallet ikke endret seg (ellers kan man ikke føre nøyaktig 0)
+        # Enter logs the hours even if the value didn't change (otherwise exactly 0 can't be logged)
         self.hours.connect("activate", lambda spin: self.state["hours"] is None and self.on_hours_changed(spin))
         row.append(self.hours)
         self.hours_box.append(row)
@@ -326,33 +324,33 @@ class MainWindow(Adw.ApplicationWindow):
 
         self.connect("close-request", self.on_close)
         self.db_worker = db.DatabaseWorker()
-        self.loaded = False  # ingenting lagres før dagens data er lest (ellers kan tom liste overskrive alt)
-        self.size_delta = 0  # standardstørrelse minus synlig størrelse (se resize_to_width)
+        self.loaded = False  # save nothing until today's data is loaded (else an empty list could overwrite everything)
+        self.size_delta = 0  # default size minus visible size (see resize_to_width)
         self.connect("map", lambda *_: GLib.timeout_add(150, self.fix_start_size))
         self.day = date.today()
         self.load()
 
         self.apply_schedule(schedule.load())
-        GLib.timeout_add_seconds(5, self.check_for_update)  # og deretter én gang om dagen via check_clock
-        self.show_weather(db.load_config().get("weather_cache", {}).get("w"))  # siste kjente vær med en gang
+        GLib.timeout_add_seconds(5, self.check_for_update)  # then once a day via on_clock_tick
+        self.show_weather(db.load_config().get("weather_cache", {}).get("w"))  # last known weather right away
         GLib.timeout_add_seconds(2, lambda: self.refresh_weather() and False)
         GLib.timeout_add_seconds(30 * 60, self.refresh_weather)
-        # Sjekk veggklokka hvert 30. sekund (en vanlig timer stopper når maskinen sover)
+        # Poll the wall clock every 30 s (a plain long timer stops while the machine sleeps)
         GLib.timeout_add_seconds(30, self.on_clock_tick)
 
     def apply_schedule(self, sch):
-        """Ta i bruk tidene fra ⚙ → schedule i vinduet (lukketid og kattens lunsj)."""
+        """Apply the ⚙ → schedule times to the window (close time and the cat's lunch)."""
         self.schedule = sch
         start, end = schedule.parse_hhmm(sch["lunch"]), schedule.parse_hhmm(sch["lunch_end"])
         catmod.LUNCH = (start.hour * 60 + start.minute, end.hour * 60 + end.minute)
-        # Neste lukketid etter at vinduet ble åpnet eller tiden ble endret (har den passert, gjelder den i morgen)
+        # Next close time after opening or changing it (if already passed today, it applies tomorrow)
         self.close_at = None
         if sch["close_on"]:
             self.close_at = datetime.combine(date.today(), schedule.parse_hhmm(sch["close"]))
             if datetime.now() >= self.close_at:
                 self.close_at += timedelta(days=1)
 
-    # --- streaks og humør ---
+    # --- streaks and mood ---
     def refresh_streak(self):
         self.db_worker.submit(db.streak_info, self.day, bool(self.state.get("complete")), callback=self.show_streak)
 
@@ -365,7 +363,7 @@ class MainWindow(Adw.ApplicationWindow):
         (self.streak_lbl.add_css_class if self.state.get("complete") else self.streak_lbl.remove_css_class)("plus")
         unlocked = {k for k, days, _ in catmod.UNLOCKS if info["best"] >= days}
         new = unlocked - catmod.UNLOCKED
-        first = not hasattr(self, "streak_seen")  # ved oppstart: ingen feiring for det man allerede har
+        first = not hasattr(self, "streak_seen")  # on startup: no celebration for what's already unlocked
         catmod.UNLOCKED.clear()
         catmod.UNLOCKED.update(unlocked)
         self.cat_panel.refresh_wear()
@@ -377,7 +375,7 @@ class MainWindow(Adw.ApplicationWindow):
         self.streak_seen = n
 
     def react_to_progress(self):
-        """Katten reagerer på hvordan dagen går (sjekkes hvert 30. sekund)."""
+        """The cat reacts to how the day is going (checked every 30 s)."""
         if not self.loaded or self.pomodoro.running() or random.random() > 0.12:
             return
         now = datetime.now()
@@ -386,7 +384,7 @@ class MainWindow(Adw.ApplicationWindow):
         if done == 0 and now.hour >= 10:
             self.title_cat.say(_(random.choice(["meow?", "*stares at list*", "mrrp?"])), 2)
         elif keys and done == len(keys):
-            self.title_cat.say("", 0)  # bare et hjerte: fornøyd katt
+            self.title_cat.say("", 0)  # just a heart: happy cat
 
     def on_clock_tick(self):
         self.check_new_day()
@@ -394,7 +392,7 @@ class MainWindow(Adw.ApplicationWindow):
         self.check_for_update()
         if self.close_at is None or datetime.now() < self.close_at:
             return True
-        # Lagre først; lukk bare hvis lagringen gikk bra, ellers prøv igjen om 30 sekunder
+        # Save first; close only if the save succeeded, otherwise retry in 30 s
         if not self.loaded:
             return True
         self.hours.update()
@@ -402,7 +400,7 @@ class MainWindow(Adw.ApplicationWindow):
         return True
 
     def check_new_day(self):
-        """Står vinduet åpent over midnatt, lagres gårsdagen og dagens liste lastes (med overførte planpunkter)."""
+        """If open past midnight: save yesterday, then load today (with carried-over plan items)."""
         if date.today() == self.day or getattr(self, "changing_day", False):
             return
 
@@ -412,7 +410,7 @@ class MainWindow(Adw.ApplicationWindow):
             self.load()
 
         def retry():
-            self.changing_day = False  # gårsdagen ble ikke lagret; check_clock prøver igjen om 30 s
+            self.changing_day = False  # yesterday wasn't saved; on_clock_tick retries in 30 s
 
         if self.loaded:
             self.changing_day = True
@@ -422,10 +420,10 @@ class MainWindow(Adw.ApplicationWindow):
             switch_day()
 
     def on_close(self, _):
-        # Lagre før vinduet lukkes og vent på databasen (maks 10 s), også om en lagring allerede er i gang.
-        # Ellers kan bakgrunnstråden bli avbrutt midt i skrivingen når appen avslutter.
+        # Save synchronously before closing (max 10 s), even if a save is already running;
+        # otherwise the worker thread could be killed mid-write when the app exits.
         if self.loaded:
-            self.hours.update()  # tall skrevet i timefeltet uten Enter
+            self.hours.update()  # commit a value typed into the hours field without Enter
             if self.save_id:
                 GLib.source_remove(self.save_id)
                 self.save_id = 0
@@ -435,9 +433,9 @@ class MainWindow(Adw.ApplicationWindow):
                 pass
         return False
 
-    # --- data (all databasetilgang går via self.db_worker, en bakgrunnstråd) ---
+    # --- data (all DB access goes through self.db_worker, a background thread) ---
     def state_copy(self):
-        return json.loads(json.dumps(self.state))  # kopi, så tråden ikke leser en liste som endres
+        return json.loads(json.dumps(self.state))  # deep copy, so the thread never reads a list being modified
 
     def set_status(self, ok, text):
         self.status.set_label(text)
@@ -451,14 +449,14 @@ class MainWindow(Adw.ApplicationWindow):
         d = self.day
         self.date_lbl.set_label(f"{_(DAYS[d.weekday()])} {d.day}{'.' if LANG == 'nb' else ''} {_(MONTHS[d.month - 1])}")
         self.set_status(True, "○ loading…")
-        self.scroll.set_sensitive(False)  # det som skrives nå, ville blitt erstattet når dataene kommer
+        self.scroll.set_sensitive(False)  # anything typed now would be overwritten when the data arrives
         self.db_worker.submit(db.load_day, d, callback=lambda result, err: self.on_loaded(d, result, err))
 
     def on_loaded(self, day, result, err):
         if day != self.day:
-            return  # svar for en dag vi har gått videre fra
+            return  # result for a day we've already moved past
         if err:
-            # Ikke la brukeren endre noe som ikke kan lagres trygt; prøv igjen om litt
+            # Block edits that can't be saved safely; retry shortly
             self.scroll.set_sensitive(False)
             self.set_status(False, f"● could not read the database – retrying in 30 s ({err})")
             GLib.timeout_add_seconds(30, lambda: (self.load() if not self.loaded and day == self.day else None) and False)
@@ -489,7 +487,7 @@ class MainWindow(Adw.ApplicationWindow):
         self.set_status(True, "○ unsaved changes")
         if self.save_id:
             GLib.source_remove(self.save_id)
-        # Vent til det har vært stille i SAVE_DELAY sekunder før vi skriver til databasen
+        # Debounce: write only after SAVE_DELAY seconds without changes
         self.save_id = GLib.timeout_add_seconds(SAVE_DELAY, self.save_now)
 
     def save_now(self, then=None, failed=None):
@@ -523,11 +521,11 @@ class MainWindow(Adw.ApplicationWindow):
         total = len(keys)
         self.blocks.set_markup("■" * done + f'<span foreground="{palette()["line"]}">{"■" * (total - done)}</span>')
         self.footer.set_label(_("[ all done – have a great day ]") if done == total else f"{done}/{total}")
-        # Hele listen ferdig akkurat nå (ikke når den lastes inn ferdig)
+        # React only when the list was just completed, not when it loads already complete
         if done == total and not getattr(self, "all_done", True) and not self.loading:
             self.title_cat.react_to("all_done", 3)
         self.all_done = done == total
-        self.state["complete"] = total > 0 and done == total  # lagres per dag, brukes til streaks
+        self.state["complete"] = total > 0 and done == total  # stored per day, used for streaks
         for key, (item, check, extra) in self.items.items():
             on = check.get_active()
             (item.add_css_class if on else item.remove_css_class)("done")
@@ -553,7 +551,7 @@ class MainWindow(Adw.ApplicationWindow):
             self.bal_detail.set_label(_("overtime balance\nweek {week} · month {month}").format(week=fmt(sm["week"]), month=fmt(sm["month"])))
 
     def focus_hours(self):
-        """Kalles kl 15:00: marker timeføringen og sett fokus på feltet."""
+        """Called at 15:00: highlight hours logging and focus the field."""
         self.hours_box.add_css_class("attention")
         self.hours.grab_focus()
         GLib.idle_add(lambda: self.scroll_to(self.hours_box))
@@ -580,9 +578,9 @@ class MainWindow(Adw.ApplicationWindow):
         self.show_overtime(None, None)
         self.save()
 
-    # --- rekkefølge og dra-og-slipp ---
+    # --- ordering and drag-and-drop ---
     def item_order(self):
-        """Alle punktnøklene i visningsrekkefølge; nye punkter havner nederst."""
+        """All item keys in display order; new items go at the bottom."""
         keys = [k for k in self.items if k not in self.state["hidden"]] + [f"r:{r['id']}" for r in self.state["routine"]]
         saved = [k for k in self.state["order"] if k in keys]
         return saved + [k for k in keys if k not in saved]
@@ -597,7 +595,7 @@ class MainWindow(Adw.ApplicationWindow):
         self.render_settings()
 
     def make_drag_handle(self, key, item):
-        """Nummeret («01») er håndtaket du drar punktet etter."""
+        """The number ("01") is the drag handle for the item."""
         num = label("", "num", "handle")
         num.set_cursor_from_name("grab")
         num.set_tooltip_text("Drag to reorder")
@@ -637,7 +635,7 @@ class MainWindow(Adw.ApplicationWindow):
     def move_item(self, dragged, target, after):
         order = self.item_order()
         if dragged == target or dragged not in order or target not in order:
-            return  # f.eks. tekst dratt inn fra et tekstfelt
+            return  # e.g. text dragged in from a text field
         order.remove(dragged)
         order.insert(order.index(target) + (1 if after else 0), dragged)
         self.state["order"] = order
@@ -677,7 +675,7 @@ class MainWindow(Adw.ApplicationWindow):
         self.update_progress()
         self.save()
 
-    # --- settings: slette og gjenopprette punkter ---
+    # --- settings: delete and restore items ---
     def build_settings_page(self):
         page = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
         head = Gtk.Box()
@@ -699,9 +697,9 @@ class MainWindow(Adw.ApplicationWindow):
         self.deleted_list = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
         page.append(self.deleted_list)
 
-        # Timer for en annen dag (glemt å føre, eller må rette)
         page.append(self.build_schedule_settings())
 
+        # Hours for another day (forgot to log, or need to correct)
         heading = label("hours for another day", "num")
         heading.set_margin_top(14)
         page.append(heading)
@@ -724,7 +722,6 @@ class MainWindow(Adw.ApplicationWindow):
         page.append(self.past_status)
         GLib.idle_add(lambda: self.on_past_day_selected(self.past_cal) and False)
 
-        # Sikkerhetskopi og eksport
         heading = label("backup", "num")
         heading.set_margin_top(14)
         page.append(heading)
@@ -741,7 +738,6 @@ class MainWindow(Adw.ApplicationWindow):
 
         self.build_weather_settings(page)
 
-        # Språk
         heading = label("language", "num")
         heading.set_margin_top(14)
         page.append(heading)
@@ -752,7 +748,6 @@ class MainWindow(Adw.ApplicationWindow):
             db.update_config(language=codes[d.get_selected()]), self.restart()))
         page.append(lang)
 
-        # Oppdateringer
         heading = label("updates", "num")
         heading.set_margin_top(14)
         page.append(heading)
@@ -765,7 +760,7 @@ class MainWindow(Adw.ApplicationWindow):
         page.append(self.check_updates)
         return page
 
-    # --- sikkerhetskopi ---
+    # --- backup ---
     def choose_file(self, title, save_name, on_chosen, pattern=None):
         dialog = Gtk.FileDialog(title=title, modal=True)
         if pattern:
@@ -779,7 +774,7 @@ class MainWindow(Adw.ApplicationWindow):
             try:
                 gfile = d.save_finish(result) if save_name else d.open_finish(result)
             except GLib.Error:
-                return  # avbrutt
+                return  # cancelled
             on_chosen(gfile.get_path())
 
         if save_name:
@@ -814,7 +809,7 @@ class MainWindow(Adw.ApplicationWindow):
         self.choose_file(_("Restore backup"), None, chosen, pattern="*.zip")
 
     def restore_from(self, path):
-        if self.save_id:  # ingen ventende lagring skal skrive over kopien etterpå
+        if self.save_id:  # a pending save must not overwrite the restored data afterwards
             GLib.source_remove(self.save_id)
             self.save_id = 0
         self.loaded = False
@@ -825,17 +820,17 @@ class MainWindow(Adw.ApplicationWindow):
                 self.backup_status.set_label(_("could not restore – {err}").format(err=err))
                 self.load()
                 return
-            self.restart()  # innstillinger (katt, tema, tider) leses ved oppstart
+            self.restart()  # settings (cat, theme, times) are only read at startup
 
         self.db_worker.submit(db.restore_backup, path, callback=done)
 
     def restart(self):
-        """Start appen på nytt (etter gjenoppretting eller oppdatering)."""
+        """Restart the app (after a restore or update)."""
         if self.loaded:
             self.on_close(None)
         os.execv(sys.executable, [sys.executable, str(Path(__file__).resolve())])
 
-    # --- vær ---
+    # --- weather ---
     def refresh_weather(self):
         place = db.load_config().get("weather_place")
         if not place:
@@ -844,7 +839,7 @@ class MainWindow(Adw.ApplicationWindow):
 
         def done(w, err):
             if err or not w:
-                return  # behold det siste kjente været
+                return  # keep the last known weather
             db.update_config(weather_cache={"date": str(date.today()), "w": w})
             self.show_weather(w)
             self.weather_remark(w)
@@ -878,7 +873,7 @@ class MainWindow(Adw.ApplicationWindow):
                     cr.fill()
 
     def weather_remark(self, w):
-        """Én gang om morgenen: katten sier noe om dagens vær (paraply, snø, fin dag)."""
+        """Once each morning, the cat comments on today's weather (umbrella, snow, nice day)."""
         today = str(date.today())
         if not 5 <= datetime.now().hour < 12 or db.load_config().get("weather_remark") == today:
             return
@@ -948,7 +943,7 @@ class MainWindow(Adw.ApplicationWindow):
         self.show_place()
         self.refresh_weather()
 
-    # --- oppdateringer ---
+    # --- updates ---
     def check_for_update(self):
         cfg = db.load_config()
         if not cfg.get("check_updates", True) or cfg.get("update_checked") == str(date.today()):
@@ -971,8 +966,7 @@ class MainWindow(Adw.ApplicationWindow):
         return False
 
     def run_in_thread(self, fn, callback):
-        """Run fn on its own thread (network calls must not hold up the database queue);
-        callback(result, error) is called on the GTK thread."""
+        """Run fn on its own thread (keeps network calls off the DB queue); callback(result, error) runs on the GTK thread."""
         def work():
             try:
                 result, err = fn(), None
@@ -1020,14 +1014,14 @@ class MainWindow(Adw.ApplicationWindow):
         self.run_in_thread(updater.download_latest_package, downloaded)
 
     def build_schedule_settings(self):
-        """⚙ → schedule: når listen åpnes, påminnelser, lukketid, lunsj og ukedager."""
+        """⚙ → schedule: list opening time, reminders, close time, lunch and weekdays."""
         box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
         heading = label("schedule", "num")
         heading.set_margin_top(14)
         box.append(heading)
         sch = schedule.load()
-        self.sched_widgets = {}  # nøkkel -> (av/på-knapp eller None, time, minutt)
-        self.day_btns = {}  # påminnelse -> sju ukedagsknapper
+        self.sched_widgets = {}  # key -> (on/off checkbox or None, hour, minute)
+        self.day_btns = {}  # reminder key -> seven weekday buttons
 
         def time_picker(key):
             t = schedule.parse_hhmm(sch[key])
@@ -1036,7 +1030,7 @@ class MainWindow(Adw.ApplicationWindow):
             for spin, value in ((hh, t.hour), (mm, t.minute)):
                 spin.set_value(value)
                 spin.set_wrap(True)
-                # Loddrett (+ over, − under) og to tegn bred, så fire felt får plass i sidepanelet
+                # Vertical (+ above, − below) and two chars wide, so four fields fit in the side panel
                 spin.set_orientation(Gtk.Orientation.VERTICAL)
                 spin.set_width_chars(2)
                 spin.connect("output", lambda sp: sp.set_text(f"{int(sp.get_value()):02d}") or True)
@@ -1056,7 +1050,7 @@ class MainWindow(Adw.ApplicationWindow):
                                      ("close", "save & close", False)]:
             on = Gtk.CheckButton(label=_(text), active=sch[f"{key}_on"])
             on.add_css_class("detail")
-            on.get_last_child().set_wrap(True)  # lang tekst brytes i stedet for å gjøre panelet bredere
+            on.get_last_child().set_wrap(True)  # wrap long text instead of widening the panel
             picker, hh, mm = time_picker(key)
             row(on, picker)
             self.sched_widgets[key] = (on, hh, mm)
@@ -1070,7 +1064,6 @@ class MainWindow(Adw.ApplicationWindow):
                     self.day_btns[key].append(b)
                 box.append(days)
 
-        # Lunsj fra–til
         lunch_from, lh, lm = time_picker("lunch")
         lunch_to, eh, em = time_picker("lunch_end")
         lunch_to.set_hexpand(False)
@@ -1090,7 +1083,7 @@ class MainWindow(Adw.ApplicationWindow):
         box.append(self.sched_status)
         return box
 
-    # --- første oppstart ---
+    # --- first launch ---
     def show_tutorial(self):
         opening = getattr(self, "last_summary", {}).get("opening_balance", 0.0)
         self.tutorial = Tutorial(self, palette, self.on_tutorial_done, opening=opening)
@@ -1108,7 +1101,7 @@ class MainWindow(Adw.ApplicationWindow):
                 self.set_status(False, f"● reminders could not be set – {err}")
 
         self.db_worker.submit(schedule.apply_reminders, sch, callback=timers_done)
-        # Oppdater schedule-feltene på ⚙-siden med det som ble valgt
+        # Sync the ⚙ schedule fields with what was chosen in the tutorial
         for key, (on, hh, mm) in self.sched_widgets.items():
             t = schedule.parse_hhmm(sch[key])
             hh.set_value(t.hour)
@@ -1147,7 +1140,7 @@ class MainWindow(Adw.ApplicationWindow):
             self.sched_status.set_label(_("saved · next open: {open} · reminder: {reminder} · close: {close}").format(
                 open=nxt(runs["morning"]), reminder=nxt(runs["hours"]), close=close))
 
-        # systemctl kjøres i bakgrunnstråden, så vinduet ikke henger om systemd svarer tregt
+        # systemctl runs on the worker thread so the window doesn't hang if systemd is slow
         self.db_worker.submit(schedule.apply_reminders, sch, callback=done)
 
     def selected_past_day(self):
@@ -1156,7 +1149,7 @@ class MainWindow(Adw.ApplicationWindow):
 
     def on_past_day_selected(self, cal):
         day = self.selected_past_day()
-        self.past_save_btn.set_sensitive(False)  # låst til dagens verdier er hentet, så de ikke lagres på feil dag
+        self.past_save_btn.set_sensitive(False)  # disabled until this day's values load, so they can't be saved to the wrong day
         if day == self.day:
             self.past_status.set_label(_("Today: use the hours field in the list."))
             return
@@ -1224,14 +1217,14 @@ class MainWindow(Adw.ApplicationWindow):
             self.deleted_list.append(row)
 
     def on_delete_clicked(self, btn, key):
-        # Første klikk: be om bekreftelse i 3 sekunder. Andre klikk: slett.
+        # First click asks for confirmation (for 3 s); the second click deletes
         if btn.get_label() != _("sure?"):
             btn.set_label(_("sure?"))
             btn.add_css_class("danger")
             GLib.timeout_add_seconds(3, lambda: (btn.set_label(_("delete")), btn.remove_css_class("danger"), False)[-1])
             return
         if key in self.items:
-            self.state["hidden"] = self.state["hidden"] + [key]  # faste punkter skjules, kan gjenopprettes
+            self.state["hidden"] = self.state["hidden"] + [key]  # default items are only hidden, so they can be restored
         else:
             self.state["routine"] = [r for r in self.state["routine"] if f"r:{r['id']}" != key]
             self.state["order"] = [k for k in self.state["order"] if k != key]
@@ -1247,7 +1240,7 @@ class MainWindow(Adw.ApplicationWindow):
         self.save()
 
     def react_to_check(self, check):
-        """Katten sier sin «check»-replikk når noe krysses av (ikke når listen lastes inn)."""
+        """The cat says its "check" line when something is checked (not while the list loads)."""
         if check.get_active() and not self.loading:
             self.title_cat.react_to("check")
 
@@ -1295,14 +1288,14 @@ class MainWindow(Adw.ApplicationWindow):
         self.save()
 
     def on_pomodoro_change(self, pomo):
-        # Tiden vises på knappen mens klokka går, så du ser den selv når panelet er lukket
+        # Show the time on the button while running, so it's visible with the panel closed
         self.pomo_btn.set_label(f"pomo {pomo.clock_text()}" if pomo.running() else "pomo")
 
     def side_buttons(self):
         return {"plan": self.side_btn, "pomo": self.pomo_btn, "cat": self.cat_btn, "settings": self.settings_btn}
 
     def on_side_toggled(self, btn, page):
-        # Plan, pomodoro og katt deler sidepanelet: åpnes ett mens et annet er åpent, byttes bare innholdet
+        # All pages share the side panel: opening one while another is open only swaps the content
         if getattr(self, "switching", False):
             return
         others = [b for name, b in self.side_buttons().items() if name != page and b.get_active()]
@@ -1319,8 +1312,7 @@ class MainWindow(Adw.ApplicationWindow):
         self.animate_side_panel(btn.get_active())
 
     def fix_start_size(self):
-        """Første gang vinduet vises: sørg for at den synlige størrelsen blir MAIN_W × MAIN_H også der
-        standardstørrelsen inkluderer usynlige kanter (X11 uten skygger)."""
+        """On first map, make the visible size MAIN_W x MAIN_H even if the default size includes invisible borders (X11)."""
         dw, dh = self.get_default_size()
         self.size_delta = max(0, dw - self.get_width())
         dy = max(0, dh - self.get_height())
@@ -1329,30 +1321,29 @@ class MainWindow(Adw.ApplicationWindow):
         return False
 
     def resize_to_width(self, width):
-        """Sett synlig bredde. «Standardstørrelsen» GTK bruker kan være større enn det synlige vinduet
-        (X11 uten skygger: 10 px), så forskjellen legges til, og høyden beholdes som den er."""
+        """Set the visible width, compensating for GTK's larger default size (X11 without shadows: 10 px); keep the height."""
         dw, dh = self.get_default_size()
         self.set_default_size(round(width) + self.size_delta, dh)
 
     def animate_side_panel(self, opening):
-        # Åpne: vinduet vokser mot høyre. Lukke: vinduet krymper fra høyre mot venstre.
+        # Opening grows the window to the right; closing shrinks it from the right
         self.side_anim.pause()
         if self.get_mapped() and self.side_anim.get_state() != Adw.AnimationState.PLAYING:
-            self.size_delta = max(0, self.get_default_size()[0] - self.get_width())  # oppdater, f.eks. etter tema-/skjermbytte
+            self.size_delta = max(0, self.get_default_size()[0] - self.get_width())  # refresh, e.g. after a theme or monitor change
         if opening:
             self.side.set_visible(True)
             self.scroll.set_hexpand(False)
         self.side_anim.set_value_from(self.get_width() if self.get_mapped() else MAIN_W)
         self.side_anim.set_value_to(MAIN_W + SIDE_W if opening else MAIN_W)
         if not self.get_mapped():
-            # Vinduet vises ikke ennå (oppstart): sett bredden direkte
+            # Not mapped yet (startup): set the width directly
             self.set_default_size(MAIN_W + SIDE_W if opening else MAIN_W, self.get_default_size()[1])
             self.side.set_visible(opening)
             self.scroll.set_hexpand(not opening)
             return
         self.side_anim.play()
-        # Animasjonen drives av skjermoppdateringene; ligger vinduet bak et annet, kan den stå stille.
-        # Er den ikke ferdig etter 0,4 s, hopp rett til slutten så panelet aldri blir stående halvveis.
+        # The animation runs on the frame clock and can stall if the window is behind another one;
+        # if it isn't done after 0.4 s, skip to the end so the panel never stays half open.
         anim = self.side_anim
         GLib.timeout_add(400, lambda: anim.get_state() == Adw.AnimationState.PLAYING and anim.skip() and False)
 
@@ -1405,23 +1396,23 @@ class App(Adw.Application):
         super().__init__(application_id="no.zivid.MorgenTodo", flags=Gio.ApplicationFlags.HANDLES_COMMAND_LINE)
 
     def do_command_line(self, cmd):
-        # Kun ett vindu: åpner man på nytt, vises det eksisterende. --hours = påminnelsen kl 15:00
+        # Single window: launching again presents the existing one. --hours = the 15:00 reminder
         args = cmd.get_arguments()
         if db.IN_FLATPAK:
-            # Flatpak har ingen systemd-timere: appen blir værende i bakgrunnen og planlegger selv
+            # Flatpak has no systemd timers: the app stays in the background and fires reminders itself
             if not getattr(self, "held", False):
                 self.hold()
                 self.held = True
                 GLib.timeout_add_seconds(30, self.fire_due_reminders)
                 GLib.timeout_add_seconds(3, lambda: self.fire_due_reminders() and False)
             if "--background" in args:
-                return 0  # startet ved innlogging: bare vent på klokka
+                return 0  # started at login: just wait for the clock
         cat = next((a.split("=", 1)[1] for a in args if a.startswith("--cat=")), None)
         self.open_window(cat=cat, hours="--hours" in args)
         return 0
 
     def open_window(self, cat=None, hours=False):
-        win = getattr(self, "win", None)
+        win = getattr(self, "window", None)
         if not win:
             if not getattr(self, "colors", None):
                 display = Gdk.Display.get_default()
@@ -1431,25 +1422,27 @@ class App(Adw.Application):
                 css.load_from_string(CSS + POMODORO_CSS)
                 Gtk.StyleContext.add_provider_for_display(display, css, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION + 1)
                 Adw.StyleManager.get_default().connect("notify::dark", lambda *_: self.apply_colors())
-            # --cat=<navn> tvinger en bestemt katteanimasjon (for testing)
+            # --cat=<name> forces a specific cat animation (for testing)
             win = self.window = MainWindow(self, cat)
-            win.connect("destroy", lambda *_: setattr(self, "win", None))  # i bakgrunnen kan et nytt vindu åpnes senere
+            win.connect("destroy", lambda *_: setattr(self, "window", None))  # in background mode a new window may be opened later
             try:
                 theme = THEME_FILE.read_text().strip()
             except OSError:
                 theme = "system"
             self.set_theme(theme)
             if not db.load_config().get("onboarded"):
-                GLib.timeout_add(600, lambda: win.show_tutorial() and False)  # første gang: velkomst
+                GLib.timeout_add(600, lambda: win.show_tutorial() and False)  # first run: welcome tutorial
         else:
-            win.check_new_day()  # f.eks. 08:00-timeren henter fram et vindu som har stått åpent siden i går
+            win.check_new_day()  # e.g. the 08:00 timer raises a window left open since yesterday
         win.present()
         if hours:
             win.focus_hours()
 
     def fire_due_reminders(self, now=None):
-        """Flatpak: åpne listen og minn om timer til tidene under ⚙ → schedule (som systemd-timerne ellers gjør).
-        Morgenlisten åpnes også om maskinen var av på tidspunktet; timepåminnelsen bare innen 30 min."""
+        """Flatpak stand-in for the systemd timers: open the list / hours reminder at the ⚙ → schedule times.
+
+        A missed morning opening still fires later; the hours reminder only within 30 min.
+        """
         now = now or datetime.now()
         sch = schedule.load()
         fired = db.load_config().get("fired", {})
@@ -1477,7 +1470,7 @@ class App(Adw.Application):
         self.theme = name
         _name, icon, scheme = next(t for t in THEMES if t[0] == name)
         Adw.StyleManager.get_default().set_color_scheme(scheme)
-        if win := getattr(self, "win", None):
+        if win := getattr(self, "window", None):
             win.theme_btn.set_label(icon)
             win.theme_btn.set_tooltip_text(_("Theme: {name}").format(name=_(name)))
         self.apply_colors()
@@ -1493,7 +1486,7 @@ class App(Adw.Application):
 
     def apply_colors(self):
         self.colors.load_from_string("".join(f"@define-color mt_{k} {v};\n" for k, v in palette().items()))
-        if win := getattr(self, "win", None):
+        if win := getattr(self, "window", None):
             win.update_progress()
 
 

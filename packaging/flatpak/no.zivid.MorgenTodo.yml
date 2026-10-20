@@ -1,5 +1,5 @@
-# Flatpak for Morning Routine. Bygges av GitHub Actions ved hver release (se .github/workflows/release.yml),
-# eller lokalt: flatpak-builder --user --install build packaging/flatpak/no.zivid.MorgenTodo.yml
+# Flatpak for Morning Routine. Built by GitHub Actions on each release (see .github/workflows/release.yml),
+# or locally: flatpak-builder --user --install build packaging/flatpak/no.zivid.MorgenTodo.yml
 app-id: no.zivid.MorgenTodo
 runtime: org.gnome.Platform
 runtime-version: '47'
@@ -10,7 +10,7 @@ finish-args:
   - --socket=wayland
   - --socket=fallback-x11
   - --device=dri
-  - --share=network  # været (open-meteo.com)
+  - --share=network  # weather (open-meteo.com)
 modules:
   - name: morgen-todo
     buildsystem: simple

@@ -1,7 +1,7 @@
-"""Været for dagen fra Open-Meteo (gratis, ingen konto eller nøkkel; bare koordinatene sendes).
+"""Today's weather from Open-Meteo (free, no account or key; only coordinates are sent).
 
-Stedet velges under ⚙ → weather (søk etter by). Uten valgt sted hentes ingenting.
-Kalles fra bakgrunnstråder; ikonene er små pixel-sprites i samme stil som katten.
+The place is chosen under ⚙ → weather (city search). Nothing is fetched without a place.
+Called from background threads; icons are small pixel sprites in the cat's style.
 """
 import json
 import urllib.parse
@@ -10,14 +10,14 @@ import urllib.request
 GEOCODING = "https://geocoding-api.open-meteo.com/v1/search"
 FORECAST = "https://api.open-meteo.com/v1/forecast"
 
-# WMO-værkoder -> type (https://open-meteo.com/en/docs)
+# WMO weather codes -> kind (https://open-meteo.com/en/docs)
 KINDS = [
     ((0,), "clear"), ((1, 2), "partly"), ((3,), "cloudy"), ((45, 48), "fog"),
     ((51, 53, 55, 56, 57), "drizzle"), ((61, 63, 65, 66, 67, 80, 81, 82), "rain"),
     ((71, 73, 75, 77, 85, 86), "snow"), ((95, 96, 99), "thunder"),
 ]
 
-# Ikoner som fyll (y = sol, g = sky, u = regn, W = snø, m = måne); konturen legges på som for katten
+# Icon fills (y = sun, g = cloud, u = rain, W = snow, m = moon); the outline is added as for the cat
 _CLOUD = ["..gg.....", ".gggg.gg.", "ggggggggg", "ggggggggg"]
 ICONS = {
     "clear": ["...y...", ".y.y.y.", "..yyy..", "yyyyyyy", "..yyy..", ".y.y.y.", "...y..."],
@@ -47,7 +47,7 @@ def _get(url, params):
 
 
 def search(name, language="en"):
-    """Steder som passer navnet: [{name, region, country, lat, lon}]."""
+    """Places matching the name: [{name, region, country, lat, lon}]."""
     data = _get(GEOCODING, {"name": name, "count": 6, "language": language, "format": "json"})
     return [{"name": r["name"], "region": r.get("admin1", ""), "country": r.get("country", ""),
              "lat": r["latitude"], "lon": r["longitude"]} for r in data.get("results", [])]
@@ -66,7 +66,7 @@ def parse_forecast(data):
 
 
 def fetch_forecast(lat, lon):
-    """Været nå og for i dag."""
+    """Current weather and today's forecast."""
     return parse_forecast(_get(FORECAST, {
         "latitude": lat, "longitude": lon, "timezone": "auto", "forecast_days": 1,
         "current": "temperature_2m,weather_code,is_day",
@@ -75,7 +75,7 @@ def fetch_forecast(lat, lon):
 
 
 def cat_remark(w):
-    """Hva katten sier om dagens vær om morgenen (engelsk nøkkel, oversettes av vinduet), eller None."""
+    """The cat's morning remark on today's weather (English key, translated by the window), or None."""
     if w["day_kind"] in ("rain", "drizzle", "thunder") and (w["rain"] or 0) >= 50:
         return "take an umbrella! ☔"
     if w["day_kind"] == "snow":

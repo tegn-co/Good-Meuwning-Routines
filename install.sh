@@ -13,7 +13,7 @@ fail() { printf '\033[31m=x.x=\033[0m %s\n' "$*" >&2; exit 1; }
 
 command -v curl >/dev/null 2>&1 || fail "Please install curl first."
 
-# Ikke Ubuntu/Debian: bruk Flatpak-utgaven (virker på alle distroer)
+# Not Ubuntu/Debian: use the Flatpak build (works on all distros)
 if ! command -v apt-get >/dev/null 2>&1; then
   command -v flatpak >/dev/null 2>&1 || fail "Morning Routine needs Ubuntu/Debian (apt) or Flatpak – see https://flatpak.org/setup/"
   TMP="$(mktemp -d)"

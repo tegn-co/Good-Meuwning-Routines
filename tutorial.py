@@ -1,6 +1,6 @@
-"""Velkomst ved første oppstart: en kort gjennomgang med katten, og et lite oppsett til slutt
-(arbeidstid, overtid man allerede har, påminnelser og om appen skal festes i oppgavelinja).
-Kan vises igjen fra ⚙ → show tutorial.
+"""First-run welcome: a short tour with the cat, ending in a small setup
+(work hours, existing overtime, reminders, and pinning the app to the dock).
+Can be shown again from ⚙ → show tutorial.
 """
 import gi
 
@@ -15,7 +15,7 @@ from translations import _
 
 APP_DESKTOP = "no.zivid.MorgenTodo.desktop"
 
-# (tittel over katten, kattens animasjon, tekst)
+# (title above the cat, cat animation, text)
 PAGES = [
     ("hi there", "walk",
      "Morning Routine is a small daily companion: a morning checklist, a plan for the day, "
@@ -42,13 +42,13 @@ PAGES = [
 
 def is_gnome_desktop():
     if db.IN_FLATPAK:
-        return False  # docken er utenfor sandkassen; Flatpak-apper festes av brukeren selv
+        return False  # the dock is outside the sandbox; Flatpak users pin the app themselves
     source = Gio.SettingsSchemaSource.get_default()
     return bool(source and source.lookup("org.gnome.shell", True))
 
 
 def pin_to_dock():
-    """Legg appen til favorittene i GNOME/Ubuntu-docken (oppgavelinja)."""
+    """Add the app to the GNOME/Ubuntu dock favorites."""
     if not is_gnome_desktop():
         return False
     settings = Gio.Settings.new("org.gnome.shell")
@@ -86,7 +86,7 @@ class Tutorial(Adw.Window):
         super().__init__(application=parent.get_application(), transient_for=parent, modal=True,
                          title=_("Welcome"), default_width=420, default_height=560)
         self.on_done = on_done
-        self.initial_opening = opening  # vist på nytt fra ⚙: behold det man har
+        self.initial_opening = opening  # reopened from ⚙: keep the current value
         root = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
         root.add_css_class("bg")
         root.append(Adw.HeaderBar(show_title=False))
@@ -190,7 +190,7 @@ class Tutorial(Adw.Window):
         db.update_config(onboarded=True, expected_hours=expected)
         db.EXPECTED_HOURS = expected
         schedule.save(sch)
-        problems = []  # timerne settes av hovedvinduet i bakgrunnen (on_done), så dette vinduet ikke fryser
+        problems = []  # timers are applied by the main window in the background (on_done) so this window doesn't freeze
         if self.pin.get_visible() and self.pin.get_active():
             try:
                 pin_to_dock()

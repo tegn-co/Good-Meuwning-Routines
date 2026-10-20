@@ -17,7 +17,7 @@ class UpdatesTest(unittest.TestCase):
             self.assertEqual(updater.check_for_newer_version(), ("1.1.1", "1.2.0"))
             updater.latest_version = lambda: "1.1.1"
             self.assertIsNone(updater.check_for_newer_version())
-            updater.installed_version = lambda: None  # fra kildekoden: aldri sjekk
+            updater.installed_version = lambda: None  # from source: never check
             self.assertIsNone(updater.check_for_newer_version())
         finally:
             updater.installed_version, updater.latest_version = orig_inst, orig_latest

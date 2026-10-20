@@ -1,4 +1,4 @@
-"""Kjører hele appen (trenger en skjerm; i CI: xvfb-run) og går gjennom det en ny bruker gjør."""
+"""Runs the whole app (needs a display; in CI: xvfb-run) through a new user's flow."""
 import traceback
 import unittest
 from datetime import date, timedelta
@@ -52,6 +52,14 @@ class AppTest(unittest.TestCase):
             check(w.bal_total.get_label() == "+3.00 h", f"opening balance: {w.bal_total.get_label()}")
 
         @step
+        def relaunch_reuses_window(w):
+            class Cmd:
+                def get_arguments(self):
+                    return ["morgen-todo"]
+            app.do_command_line(Cmd())
+            check(app.window is w, "launching again opened a second window instead of reusing the open one")
+
+        @step
         def list_and_plan(w):
             w.items["email"][1].set_active(True)
             check(w.titles["email"].get_label().startswith("<s>"), "checked item not struck through")
@@ -63,7 +71,7 @@ class AppTest(unittest.TestCase):
             rid = "r:" + w.state["routine"][0]["id"]
             w.move_item(rid, "email", after=False)
             check(w.item_order()[0] == rid, "reorder failed")
-            w.move_item("random dragged text", "email", after=False)  # skal ignoreres
+            w.move_item("random dragged text", "email", after=False)  # must be ignored
             w.plan.get_buffer().set_text("- write report\n- call Ola\nnote")
             check(w.plan_items() == ["write report", "call Ola"], "plan items")
             w.hours.set_value(9)
@@ -162,7 +170,7 @@ class AppTest(unittest.TestCase):
             check(min(xs) >= 0 and max(xs) <= r.area_width() and min(ys) >= -1 and max(ys) <= r.area_height(),
                   f"cat left the window: x {min(xs):.0f}..{max(xs):.0f} y {min(ys):.0f}..{max(ys):.0f}")
             check(w.overlay.get_height() == r.area_height(), "overlay grew")
-            # Påskeegget: 5 klikk på katten -> playtime
+            # Easter egg next: 5 clicks on the cat -> playtime
             w.title_cat.forced = "sit"
 
         @step

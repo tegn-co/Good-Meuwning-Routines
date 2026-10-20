@@ -1,7 +1,7 @@
-"""Lager pixel art-bildene til README-en fra de samme spritene som appen bruker.
+"""Renders the README pixel art from the app's own sprites.
 
-Bruk: python3 docs/make_art.py   ->  docs/*.png
-Alltid standardkatten (orange tabby), uansett hvordan katten er tilpasset på maskinen.
+Usage: python3 docs/make_art.py   ->  docs/*.png
+Always the default cat (orange tabby), regardless of local customization.
 """
 import math
 import sys
@@ -21,11 +21,11 @@ import cat  # noqa: E402
 BG = (0.055, 0.055, 0.055)
 FG = "#ededea"
 ACCENT = "#ff6a3d"
-P = 4  # skjermpiksler per sprite-piksel i bildene
+P = 4  # screen pixels per sprite pixel
 
 
 def sprite(name, frame=0, breed="orange tabby", shape="normal"):
-    # Alle fargene (skål, sommerfugl, tilbehør) + rasens pels, uansett hva katten er tilpasset til lokalt
+    # All colors (bowl, butterfly, accessories) + the breed's fur, ignoring local customization
     return cat.add_outline(cat.SHAPES[shape](cat.FILL[name][frame])), dict(cat.COLORS, **cat.BREEDS[breed])
 
 
@@ -67,7 +67,7 @@ def banner():
     tx, ty = 60, 100
     text(cr, "GOOD MEUWNING", tx, ty, 72)
     text(cr, "_", tx + logical.width + 8, ty, 72, ACCENT)
-    ground = ty + ink.y  # oversiden av bokstavene: katten og skåla står her
+    ground = ty + ink.y  # top of the letters: the cat and bowl stand here
     rows, colors = sprite("walk", 1)
     draw_sprite(cr, rows, colors, 300, ground - cat.sprite_size(rows)[1] * P + P)
     bowl = cat.BOWLS[0]
@@ -96,13 +96,13 @@ def single(name, frame, file, extra=None, w=200, h=120):
 def butterfly():
     surf, cr = canvas(200, 130, bg=False)
     rows, colors = sprite("run", 0)
-    draw_sprite(cr, rows, colors, 40, 130 - 8 - cat.sprite_size(rows)[1] * P - 20)  # midt i hoppet
+    draw_sprite(cr, rows, colors, 40, 130 - 8 - cat.sprite_size(rows)[1] * P - 20)  # mid-jump
     draw_sprite(cr, cat.BUTTERFLY_SPRITES[0], colors, 135, 18, px=4)
     surf.write_to_png(str(HERE / "cat-butterfly.png"))
 
 
 def accessories():
-    """Sløyfe, kaffekopp, lue, nisselue og spøkelse."""
+    """Bow tie, coffee cup, beanie, Santa hat and ghost."""
     looks = [({"bowtie"}, "none", False), ({"coffee"}, "none", True), ({"beanie"}, "none", False),
              (set(), "december", False), (set(), "halloween", False)]
     surf, cr = canvas(130 * len(looks), 140, bg=False)
@@ -131,7 +131,7 @@ def breeds():
 
 
 def divider():
-    """Smal stripe: en liten katt som går langs en linje."""
+    """Thin strip: a small cat walking along a line."""
     surf, cr = canvas(600, 40, bg=False)
     cr.set_source_rgb(*cat.hex_to_rgb("#8a8a85"))
     cr.rectangle(0, 34, 600, 2)

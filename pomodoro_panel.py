@@ -1,9 +1,9 @@
-"""Pomodoro-panel for morgen-todo-vinduet (glir ut fra siden, som plan-panelet).
+"""Pomodoro side panel (slides out like the plan panel).
 
-Standard: 25 min fokus → 5 min pause, og 15 min lang pause etter hver 4. fokusøkt.
-Tidene kan endres under «settings» i panelet og lagres i ~/.config/morgen-todo/pomodoro-settings.json.
-Katten i «good morning» følger med mens klokka går: sover når du jobber,
-leker i pausene og spiser i den lange pausen. Når klokka står, gjør den som vanlig.
+Default: 25 min focus → 5 min break, and a 15 min long break after every 4th focus session.
+Times are set under "settings" in the panel and saved in ~/.config/morgen-todo/pomodoro-settings.json.
+While the timer runs the title cat sleeps during focus, plays in breaks and eats in the long break;
+when stopped it behaves as usual.
 """
 import json
 import subprocess
@@ -17,17 +17,17 @@ from gi.repository import GLib, Gtk  # noqa: E402
 import database as db  # noqa: E402
 from translations import _  # noqa: E402
 
-# Standardverdier; brukerens egne ligger i SETTINGS_FILE. "rounds" = lang pause etter så mange fokusøkter
+# Defaults; user values live in SETTINGS_FILE. "rounds" = focus sessions before a long break
 DEFAULTS = {"focus": 25, "short": 5, "long": 15, "rounds": 4}
-# Innstillingene i panelet: nøkkel, tekst, min, maks
+# Panel settings: key, label, min, max
 FIELDS = [("focus", "focus min", 1, 120), ("short", "break min", 1, 60), ("long", "long break min", 1, 90),
           ("rounds", "rounds before long", 2, 8)]
 CONFIG_DIR = db.CONFIG_DIR
-STATS_FILE = CONFIG_DIR / "pomodoro.json"  # antall fullførte økter i dag
+STATS_FILE = CONFIG_DIR / "pomodoro.json"  # sessions completed today
 SETTINGS_FILE = CONFIG_DIR / "pomodoro-settings.json"
 
 PHASE_NAMES = {"focus": "focus", "short": "break", "long": "long break"}
-CAT_MODE = {"focus": "sleep", "short": "play", "long": "eat"}  # kattens animasjon mens klokka går
+CAT_MODE = {"focus": "sleep", "short": "play", "long": "eat"}  # cat animation while the timer runs
 
 CSS = """
 .time { font-family: "Silkscreen"; font-size: 46px; }
@@ -54,13 +54,13 @@ def label(text, *classes):
 class PomodoroPanel(Gtk.Box):
     def __init__(self, cat, palette, on_change=None):
         super().__init__(orientation=Gtk.Orientation.VERTICAL, spacing=8)
-        self.cat = cat  # tittel-katten i hovedvinduet
+        self.cat = cat  # title cat in the main window
         self.palette = palette
-        self.on_change = on_change  # kalles hvert kvartsekund, f.eks. for å vise tiden på knappen
+        self.on_change = on_change  # called every 250 ms, e.g. to show the time on the button
         self.settings = self.load_settings()
         self.phase = "focus"
         self.remaining = self.full_remaining = timedelta(minutes=self.settings["focus"])
-        self.ends_at = None  # satt når klokka går (veggklokke, så den tåler at maskinen sover)
+        self.ends_at = None  # set while running (wall clock, so it survives suspend)
         self.done_in_cycle = 0
         self.today = self.load_stats()
         self.stats_date = date.today()
@@ -93,7 +93,7 @@ class PomodoroPanel(Gtk.Box):
         self.sessions.set_margin_top(6)
         self.append(self.sessions)
 
-        # Innstillinger (skjult til du trykker «settings»)
+        # Settings (hidden until "settings" is clicked)
         toggle = Gtk.ToggleButton(label=_("settings ▸"), halign=Gtk.Align.CENTER, margin_top=6)
         toggle.add_css_class("flat")
         grid = Gtk.Grid(row_spacing=6, column_spacing=12, margin_top=6, halign=Gtk.Align.CENTER)
@@ -120,7 +120,7 @@ class PomodoroPanel(Gtk.Box):
         b.connect("clicked", handler)
         return b
 
-    # --- innstillinger ---
+    # --- settings ---
     def load_settings(self):
         try:
             saved = json.loads(SETTINGS_FILE.read_text())
@@ -135,16 +135,16 @@ class PomodoroPanel(Gtk.Box):
             SETTINGS_FILE.write_text(json.dumps(self.settings))
         except OSError:
             pass
-        # Står klokka urørt i denne fasen, får den den nye tiden med en gang; ellers gjelder den fra neste fase
+        # An untouched phase takes the new time now; otherwise it applies from the next phase
         if key == self.phase and not self.running() and not self.has_started():
             self.remaining = self.full_remaining = timedelta(minutes=self.settings[key])
         self.refresh()
 
     def has_started(self):
-        """Er det gått tid i denne fasen (pauset midt i)?"""
+        """Has time elapsed in this phase (paused midway)?"""
         return self.remaining != self.full_remaining
 
-    # --- statistikk ---
+    # --- stats ---
     def load_stats(self):
         try:
             data = json.loads(STATS_FILE.read_text())
@@ -159,7 +159,7 @@ class PomodoroPanel(Gtk.Box):
         except OSError:
             pass
 
-    # --- klokke ---
+    # --- clock ---
     def running(self):
         return self.ends_at is not None
 
@@ -177,7 +177,7 @@ class PomodoroPanel(Gtk.Box):
         return True
 
     def reset_counter_on_new_day(self):
-        """Står vinduet åpent over midnatt, begynner tellingen på nytt for den nye dagen."""
+        """Restart the count if the window stays open past midnight."""
         if date.today() != self.stats_date:
             self.stats_date = date.today()
             self.today = 0
@@ -191,11 +191,11 @@ class PomodoroPanel(Gtk.Box):
             self.save_stats()
             nxt = "long" if self.done_in_cycle % self.settings["rounds"] == 0 else "short"
             notify(_("🍅 Focus done"), _("Time for a {n} min break.").format(n=self.settings[nxt]))
-            self.set_phase(nxt, autostart=True)  # pausen starter av seg selv
+            self.set_phase(nxt, autostart=True)  # breaks start automatically
             self.cat.react_to("break", 3)
         else:
             notify(_("🍅 Break over"), _("Ready for the next focus session?"))
-            self.set_phase("focus", autostart=False)  # fokus starter når du trykker start
+            self.set_phase("focus", autostart=False)  # focus waits for the start button
             self.cat.react_to("focus", 3)
 
     def set_phase(self, phase, autostart):
@@ -220,12 +220,12 @@ class PomodoroPanel(Gtk.Box):
         self.sessions.set_label(_("{dots}   today: {n}").format(dots=dots, n=self.today))
         self.phase_lbl.set_label(_(PHASE_NAMES[self.phase]) + ("" if self.running() else _(" · paused") if self.has_started() else ""))
         self.start_btn.set_label(_("pause") if self.running() else _("start"))
-        # Katten følger pomodoroen mens den går; ellers vanlige animasjoner
+        # The cat follows the pomodoro while it runs; otherwise normal animations
         self.cat.mode = CAT_MODE[self.phase] if self.running() else None
         if self.on_change:
             self.on_change(self)
 
-    # --- knapper ---
+    # --- buttons ---
     def on_start(self, _):
         if self.running():
             self.remaining = self.time_left()

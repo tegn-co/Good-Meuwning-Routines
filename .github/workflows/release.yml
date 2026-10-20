@@ -1,6 +1,6 @@
-# Lager en GitHub Release når en versjonstag pushes:
+# Creates a GitHub Release when a version tag is pushed:
 #   git tag v1.3.0 && git push origin v1.3.0
-# Testene kjøres først; så bygges .deb (Ubuntu/Debian) og .flatpak (alle distroer), og begge legges ved releasen.
+# Tests run first; then the .deb (Ubuntu/Debian) and .flatpak (all distros) are built and attached.
 name: Release
 
 on:
@@ -15,7 +15,7 @@ jobs:
     uses: ./.github/workflows/tests.yml
 
   deb:
-    needs: test  # ingen release hvis testene feiler
+    needs: test  # no release if tests fail
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v5
@@ -29,7 +29,7 @@ jobs:
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
           ./packaging/build-deb.sh "$VERSION"
-          # Fast navn i tillegg, så install.sh alltid kan hente .../releases/latest/download/morgen-todo_all.deb
+          # Also a fixed name, so install.sh can always fetch .../releases/latest/download/morgen-todo_all.deb
           cp "packaging/dist/morgen-todo_${VERSION}_all.deb" packaging/dist/morgen-todo_all.deb
 
       - name: Check the package installs
@@ -65,7 +65,7 @@ jobs:
         run: |
           flatpak install --user -y --noninteractive morgen-todo.flatpak
           flatpak run --user --command=python3 no.zivid.MorgenTodo -c \
-            "import sys; sys.path.insert(0, '/app/share/morgen-todo'); import db; assert db.IN_FLATPAK"
+            "import sys; sys.path.insert(0, '/app/share/morgen-todo'); import database; assert database.IN_FLATPAK"
 
       - uses: actions/upload-artifact@v4
         with:

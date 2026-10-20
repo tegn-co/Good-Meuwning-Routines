@@ -1,9 +1,9 @@
-"""Databasen for morgen-todo (SQLite), brukt direkte av vinduet via en bakgrunnstråd.
+"""SQLite database for morgen-todo, used by the window through a background thread.
 
-Plassering: ~/.local/share/morgen-todo/morgen-todo.db som standard. Kan overstyres med
-"db_path" i ~/.config/morgen-todo/config.json eller miljøvariabelen MORGEN_TODO_DB.
-Ligger databasen på en nettverksdisk (CIFS/NFS/SSHFS), brukes lock-filer i stedet for vanlig
-SQLite-låsing, og gjenglemte låser etter et krasj ryddes bort automatisk.
+Default location: ~/.local/share/morgen-todo/morgen-todo.db. Override with "db_path" in
+~/.config/morgen-todo/config.json or the MORGEN_TODO_DB environment variable.
+On a network drive (CIFS/NFS/SSHFS) lock files are used instead of normal SQLite locking,
+and stale locks left after a crash are removed automatically.
 """
 import csv
 import json
@@ -22,9 +22,9 @@ from pathlib import Path
 CONFIG_DIR = Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config")) / "morgen-todo"
 CONFIG_FILE = CONFIG_DIR / "config.json"
 DATA_DIR = Path(os.environ.get("XDG_DATA_HOME", Path.home() / ".local" / "share")) / "morgen-todo"
-IN_FLATPAK = Path("/.flatpak-info").exists()  # kjører som Flatpak: ingen systemd-timere, appen planlegger selv
+IN_FLATPAK = Path("/.flatpak-info").exists()  # Flatpak has no systemd timers, so the app schedules itself
 NETWORK_FS = {"cifs", "smb3", "smbfs", "nfs", "nfs4", "fuse.sshfs", "9p"}
-STALE_LOCK_SECONDS = 60  # en lås eldre enn dette er etter et krasj (lagringer tar under ett sekund)
+STALE_LOCK_SECONDS = 60  # older locks are left from a crash (saves take under a second)
 
 
 def load_config():
@@ -35,7 +35,7 @@ def load_config():
 
 
 def update_config(**changes):
-    """Slå sammen endringer inn i config.json (resten av fila beholdes)."""
+    """Merge changes into config.json, keeping the other keys."""
     config = load_config()
     config.update(changes)
     CONFIG_DIR.mkdir(parents=True, exist_ok=True)
@@ -45,11 +45,11 @@ def update_config(**changes):
 
 CONFIG = load_config()
 DB_PATH = Path(os.environ.get("MORGEN_TODO_DB") or CONFIG.get("db_path") or DATA_DIR / "morgen-todo.db").expanduser()
-EXPECTED_HOURS = float(CONFIG.get("expected_hours", 8))  # forventet arbeidstid på hverdager
+EXPECTED_HOURS = float(CONFIG.get("expected_hours", 8))  # expected hours on weekdays
 
 
 def is_on_network_drive(path):
-    """Ligger stien på en nettverksdisk? (lengste treff i /proc/mounts)"""
+    """Is the path on a network drive? (longest match in /proc/mounts)"""
     try:
         mounts = [line.split()[1:3] for line in Path("/proc/mounts").read_text().splitlines()]
     except OSError:
@@ -64,7 +64,7 @@ def is_on_network_drive(path):
 
 
 def file_server_time(directory):
-    """Klokka på filserveren (mtime på en fil vi lager der), så maskiner med feil klokke ikke tar andres låser."""
+    """File server time (mtime of a probe file), so machines with a wrong clock don't steal live locks."""
     probe = directory / f".morgen-todo-clock-{os.getpid()}"
     probe.touch()
     try:
@@ -78,11 +78,11 @@ def remove_stale_lock(lock):
         if lock.exists() and file_server_time(lock.parent) - lock.stat().st_mtime > STALE_LOCK_SECONDS:
             lock.rmdir() if lock.is_dir() else lock.unlink()
     except FileNotFoundError:
-        pass  # låsen ble frigjort (eller ryddet av en annen) i mellomtiden
+        pass  # released (or cleaned up by another machine) in the meantime
 
 
 def add_column_if_missing(conn, sql):
-    """ALTER TABLE som tåler at en annen maskin la til kolonnen samtidig (delt database)."""
+    """ALTER TABLE that tolerates another machine adding the column at the same time (shared database)."""
     try:
         conn.execute(sql)
     except sqlite3.OperationalError as e:
@@ -93,7 +93,7 @@ def add_column_if_missing(conn, sql):
 def connect():
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
     if is_on_network_drive(DB_PATH.parent):
-        # Vanlig SQLite-låsing virker ikke på CIFS; bruk lock-filer, og fjern en lås som er blitt liggende
+        # Normal SQLite locking does not work on CIFS; use lock files and clear stale ones
         remove_stale_lock(Path(f"{DB_PATH}.lock"))
         conn = sqlite3.connect(f"file:{DB_PATH}?vfs=unix-dotfile", uri=True, timeout=5)
     else:
@@ -112,25 +112,25 @@ def connect():
     if "hours" not in cols:
         add_column_if_missing(conn, "ALTER TABLE days ADD COLUMN hours REAL")
     if "day_off" not in cols:
-        # Fridag (ferie, syk, helligdag): ingen forventet arbeidstid den dagen
+        # Day off (vacation, sick, holiday): no expected hours
         add_column_if_missing(conn, "ALTER TABLE days ADD COLUMN day_off INTEGER NOT NULL DEFAULT 0")
     if "complete" not in cols:
-        # Hele listen ferdig den dagen (brukes til streaks)
+        # Whole list done that day (used for streaks)
         add_column_if_missing(conn, "ALTER TABLE days ADD COLUMN complete INTEGER NOT NULL DEFAULT 0")
     if "expected" not in cols:
-        # Forventet tid lagres per dag, så en ny arbeidsdag-lengde ikke endrer gammel overtid.
-        # Eksisterende dager får dagens regel.
+        # Expected hours are stored per day so changing the workday length doesn't alter past overtime.
+        # Existing days get the current rule.
         add_column_if_missing(conn, "ALTER TABLE days ADD COLUMN expected REAL")
         conn.execute(
             """UPDATE days SET expected = CASE WHEN day_off = 1 OR strftime('%w', date) IN ('0', '6')
                                                THEN 0 ELSE ? END
                WHERE expected IS NULL AND hours IS NOT NULL""", (EXPECTED_HOURS,))
         conn.commit()
-    # Rekkefølgen på punktene i listen (faste punkter og rutinepunkter), lik for alle dager
+    # Item order (fixed and routine items), shared by all days
     conn.execute("CREATE TABLE IF NOT EXISTS item_order (key TEXT PRIMARY KEY, position INTEGER NOT NULL)")
-    # Faste punkter (01–05) som er slettet i settings; kan gjenopprettes
+    # Fixed items (01–05) deleted in settings; can be restored
     conn.execute("CREATE TABLE IF NOT EXISTS hidden_items (key TEXT PRIMARY KEY)")
-    # Egne rutinepunkter som kommer tilbake hver dag; avkryssing lagres per dag i days.checks
+    # Custom routine items that recur daily; checks are stored per day in days.checks
     conn.execute(
         """CREATE TABLE IF NOT EXISTS routine (
                id       TEXT PRIMARY KEY,
@@ -138,14 +138,14 @@ def connect():
                position INTEGER NOT NULL
            )"""
     )
-    # Innstillinger, f.eks. opening_balance = overtid opparbeidet før timeføringen startet
+    # Settings, e.g. opening_balance = overtime earned before hour logging started
     conn.execute("CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value REAL NOT NULL)")
     return conn
 
 
 @contextmanager
 def session():
-    """Én transaksjon; tilkoblingen lukkes etterpå (ingen åpne filer på nettverksdisken)."""
+    """One transaction; the connection is closed afterwards (no open files on a network drive)."""
     conn = connect()
     try:
         with conn:
@@ -155,12 +155,12 @@ def session():
 
 
 def expected_hours_for(day, day_off=False):
-    """Forventet arbeidstid en gitt dag: 0 i helgen og på fridager."""
+    """Expected hours for a day: 0 on weekends and days off."""
     return 0.0 if day_off or day.weekday() >= 5 else EXPECTED_HOURS
 
 
 def unfinished_plan_tasks(plan, checks):
-    """Plan-oppgaver (linjer som starter med «-») som ikke ble krysset av; tas med til neste dag."""
+    """Unchecked plan tasks (lines starting with "-"); carried over to the next day."""
     checks = json.loads(checks)
     lines = (l.strip() for l in plan.splitlines())
     tasks = [l[1:].strip() for l in lines if l.startswith("-") and l[1:].strip()]
@@ -176,17 +176,17 @@ def load_day(day):
         order = [r[0] for r in conn.execute("SELECT key FROM item_order ORDER BY position")]
         hidden = [r[0] for r in conn.execute("SELECT key FROM hidden_items")]
         prev = None
-        # En rad uten noe i listen (bare timer ført under ⚙, f.eks. på forhånd) regnes som en ny dag
+        # A row with an empty list (only hours logged under ⚙, e.g. in advance) counts as a new day
         fresh = not row or (row[0] == "{}" and row[1] == "" and row[2] == "[]")
         if fresh:
-            # Siste dag listen faktisk ble brukt (ikke rader som bare har timer ført i settings)
+            # Last day the list was actually used (skip rows with only logged hours)
             prev = conn.execute(
                 """SELECT plan, checks FROM days WHERE date < ? AND (plan != '' OR checks != '{}')
                    ORDER BY date DESC LIMIT 1""", (day.isoformat(),)
             ).fetchone()
     shared = {"routine": routine, "order": order, "hidden": hidden}
     if fresh:
-        # Ny dag: uferdige plan-oppgaver fra forrige dag blir med (timer ført på forhånd beholdes)
+        # New day: carry over unfinished plan tasks (keep hours logged in advance)
         plan = "\n".join(f"- {t}" for t in unfinished_plan_tasks(*prev)) if prev else ""
         hours, day_off = (row[3], bool(row[4])) if row else (None, False)
         return {"checks": {}, "plan": plan, "meetings": [], "hours": hours, "day_off": day_off, **shared}
@@ -232,7 +232,7 @@ def get_logged_hours(day):
 
 
 def set_logged_hours(day, hours, day_off):
-    """Før timer for en annen dag (endrer bare timer og fridag, ikke listen)."""
+    """Log hours for another day (only hours and day off, not the list)."""
     with session() as conn:
         conn.execute(
             """INSERT INTO days (date, updated_at, hours, day_off, expected) VALUES (?, ?, ?, ?, ?)
@@ -244,15 +244,15 @@ def set_logged_hours(day, hours, day_off):
 
 
 def set_opening_balance(hours):
-    """Overtid opparbeidet før man begynte å føre timer her (settes i oppstartsveiviseren)."""
+    """Overtime earned before logging hours here (set in the setup wizard)."""
     with session() as conn:
         conn.execute("INSERT INTO settings (key, value) VALUES ('opening_balance', ?) "
                      "ON CONFLICT(key) DO UPDATE SET value = excluded.value", (hours,))
 
 
 def streak_info(day, today_complete):
-    """Hvor mange arbeidsdager på rad hele listen er gjort (helg og fridager hoppes over, bryter ikke).
-    I dag teller bare når den er ferdig; ellers lever rekka fortsatt fra i går. Beste streak lagres."""
+    """Workdays in a row with the whole list done (weekends and days off are skipped, not breaks).
+    Today counts only once complete; otherwise the streak lives on from yesterday. Stores the best streak."""
     since = (day - timedelta(days=400)).isoformat()
     with session() as conn:
         rows = {r[0]: (r[1], r[2]) for r in conn.execute(
@@ -262,7 +262,7 @@ def streak_info(day, today_complete):
         for _ in range(400):
             complete, day_off = rows.get(d.isoformat(), (0, 0))
             if d.weekday() >= 5 or day_off:
-                pass  # helg/fridag: hopp over
+                pass  # weekend/day off: skip
             elif complete:
                 streak += 1
             else:
@@ -276,8 +276,8 @@ def streak_info(day, today_complete):
 
 
 def overtime_summary(day):
-    """Overtid (timer minus forventet tid) totalt, denne uka og denne måneden; bare dager med førte timer,
-    og ikke dager fram i tid. Helg og fridager har forventet tid 0, så timer da teller som overtid."""
+    """Overtime (hours minus expected) in total, this week and this month; only logged, non-future days.
+    Weekends and days off expect 0, so hours worked then count as overtime."""
     week_start = (day - timedelta(days=day.weekday())).isoformat()
     month_start = day.replace(day=1).isoformat()
     with session() as conn:
@@ -299,12 +299,12 @@ def overtime_summary(day):
     return {"opening_balance": opening, "total": total + opening, "week": week, "month": month, "days_logged": days}
 
 
-# --- Sikkerhetskopi og eksport ---
+# --- Backup and export ---
 BACKUP_CONFIG = ["config.json", "cat.json", "theme", "pomodoro-settings.json", "pomodoro.json"]
 
 
 def export_backup(path):
-    """Zip med en konsistent kopi av databasen og innstillingsfilene."""
+    """Zip a consistent copy of the database and the settings files."""
     with tempfile.TemporaryDirectory() as tmp:
         snap = Path(tmp) / "morgen-todo.db"
         src, dst = connect(), sqlite3.connect(snap)
@@ -323,8 +323,8 @@ def export_backup(path):
 
 
 def restore_backup(path):
-    """Erstatt databasen og innstillingene med en sikkerhetskopi. Den nåværende databasen
-    lagres først som <navn>.before-restore.db. Hvor databasen ligger (db_path) beholdes."""
+    """Replace the database and settings with a backup. The current database is first
+    saved as <name>.before-restore.db. The database location (db_path) is kept."""
     with zipfile.ZipFile(path) as z, tempfile.TemporaryDirectory() as tmp:
         names = z.namelist()
         if "morgen-todo.db" not in names:
@@ -332,7 +332,7 @@ def restore_backup(path):
         z.extract("morgen-todo.db", tmp)
         incoming = sqlite3.connect(Path(tmp) / "morgen-todo.db")
         try:
-            incoming.execute("SELECT count(*) FROM days").fetchone()  # er det en gyldig database?
+            incoming.execute("SELECT count(*) FROM days").fetchone()  # is it a valid database?
             if DB_PATH.exists():
                 shutil.copy2(DB_PATH, DB_PATH.with_name(DB_PATH.stem + ".before-restore.db"))
             target = connect()
@@ -358,7 +358,7 @@ def restore_backup(path):
 
 
 def export_hours_csv(path):
-    """Alle førte timer som CSV (til timelister)."""
+    """All logged hours as CSV (for timesheets)."""
     with session() as conn:
         rows = conn.execute(
             """SELECT date, hours, COALESCE(expected, ?), day_off FROM days
@@ -373,8 +373,8 @@ def export_hours_csv(path):
 
 
 class DatabaseWorker:
-    """Kjører databasekall i rekkefølge på en egen tråd, så vinduet ikke fryser når disken er treg.
-    Resultatet leveres tilbake på GTK-tråden: callback(resultat, feil)."""
+    """Runs database calls in order on a worker thread so the window doesn't freeze on a slow disk.
+    Results are delivered on the GTK thread: callback(result, error)."""
 
     def __init__(self):
         self.jobs = queue.Queue()
@@ -386,7 +386,7 @@ class DatabaseWorker:
             fn, args, callback, done = self.jobs.get()
             try:
                 result, error = fn(*args), None
-            except Exception as e:  # noqa: BLE001 – feilen vises i statuslinja
+            except Exception as e:  # noqa: BLE001 – shown in the status bar
                 result, error = None, e
             if done:
                 done.append((result, error))
@@ -398,7 +398,7 @@ class DatabaseWorker:
         self.jobs.put((fn, args, callback, None))
 
     def run_sync(self, fn, *args, timeout=10):
-        """Vent på resultatet (brukes når vinduet lukkes). Køen foran kjøres ferdig først."""
+        """Wait for the result (used when the window closes). Queued jobs run first."""
         done = [threading.Event()]
         self.jobs.put((fn, args, None, done))
         if not done[0].wait(timeout):

@@ -2,7 +2,7 @@
 Description=Morning Routine: open the list
 
 [Timer]
-# Standardtid; brukerens egne tider legges i ~/.config/systemd/user/morgen-todo.timer.d/schedule.conf
+# Default time; user times go in ~/.config/systemd/user/morgen-todo.timer.d/schedule.conf
 OnCalendar=Mon..Fri 08:00
 Persistent=true
 

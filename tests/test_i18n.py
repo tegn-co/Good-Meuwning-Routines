@@ -16,7 +16,7 @@ MODULES = ["app.py", "cat.py", "cat_panel.py", "pomodoro_panel.py", "tutorial.py
 
 class I18nTest(unittest.TestCase):
     def test_no_function_shadows_the_translate_function(self):
-        """En parameter eller variabel som heter _ i en funksjon som kaller _("…") gir TypeError."""
+        """A parameter or variable named _ in a function that calls _("…") causes a TypeError."""
         problems = []
         for f in MODULES:
             tree = ast.parse((env.ROOT / f).read_text())

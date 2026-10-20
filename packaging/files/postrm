@@ -5,5 +5,5 @@ if [ "$1" = "remove" ] || [ "$1" = "purge" ]; then
   command -v update-desktop-database >/dev/null && update-desktop-database -q /usr/share/applications || true
   command -v gtk-update-icon-cache >/dev/null && gtk-update-icon-cache -q -f /usr/share/icons/hicolor || true
 fi
-# Brukernes egne data (~/.local/share/morgen-todo, ~/.config/morgen-todo) røres ikke.
+# User data (~/.local/share/morgen-todo, ~/.config/morgen-todo) is left untouched.
 exit 0

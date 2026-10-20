@@ -1,7 +1,7 @@
-"""Norsk og engelsk. Engelsk er grunnspråket i koden; _("tekst") gir den norske utgaven når språket er norsk.
+"""Norwegian and English. English is the source language; _("text") returns the Norwegian version when active.
 
-Språket velges under ⚙ → language (lagres som "language" i config.json). Er ingenting valgt,
-brukes systemspråket: nb/nn/no gir norsk, alt annet engelsk. Endring krever omstart.
+The language is chosen under ⚙ → language (saved as "language" in config.json). If unset,
+the system locale is used: nb/nn/no gives Norwegian, anything else English. Changes need a restart.
 """
 import os
 
@@ -29,14 +29,14 @@ def _(text):
 
 
 NB = {
-    # --- tittel, dato ---
+    # --- title, date ---
     "good morning": "god morgen",
     "monday": "mandag", "tuesday": "tirsdag", "wednesday": "onsdag", "thursday": "torsdag",
     "friday": "fredag", "saturday": "lørdag", "sunday": "søndag",
     "january": "januar", "february": "februar", "march": "mars", "april": "april", "may": "mai",
     "june": "juni", "july": "juli", "august": "august", "september": "september",
     "october": "oktober", "november": "november", "december": "desember",
-    # --- listen ---
+    # --- list ---
     "Check email": "Sjekk e-post",
     "Reply to anything urgent, flag the rest": "Svar på det som haster, flagg resten",
     "Add new tasks to today's plan": "Legg nye oppgaver inn i dagens plan",
@@ -65,7 +65,7 @@ NB = {
     "{n} days in a row": "{n} dager på rad",
     "{n} days in a row!": "{n} dager på rad!",
     "unlocked: {name}!": "låst opp: {name}!",
-    # --- timer ---
+    # --- hours ---
     "Hours worked today": "Timer jobbet i dag",
     "day off (vacation, sick, holiday)": "fridag (ferie, syk, helligdag)",
     "h": "t",
@@ -80,7 +80,7 @@ NB = {
     "● could not read the database – retrying in 30 s ({err})": "● fikk ikke lest databasen – prøver igjen om 30 s ({err})",
     "● reminders could not be set – {err}": "● påminnelsene kunne ikke settes – {err}",
     "● setup: {problems}": "● oppsett: {problems}",
-    # --- tittellinja og paneler ---
+    # --- title bar and panels ---
     "Pomodoro timer": "Pomodoro-klokke",
     "Customize the cat": "Tilpass katten",
     "Settings": "Innstillinger",
@@ -89,7 +89,7 @@ NB = {
     "today's plan": "dagens plan",
     "Write lines starting with - in 05 to add them here": "Skriv linjer som starter med - i 05 for å få dem hit",
     "pomo {clock}": "pomo {clock}",
-    # --- oppdatering ---
+    # --- updates ---
     "update": "oppdater",
     "restart": "start på nytt",
     "Not now": "Ikke nå",
@@ -100,7 +100,7 @@ NB = {
     "Installing – enter your password in the dialog…": "Installerer – skriv passordet ditt i vinduet…",
     "Updated to {version}. Restart to use it.": "Oppdatert til {version}. Start på nytt for å bruke den.",
     "Not updated (cancelled or failed). Try again, or run:\n{cmd}": "Ikke oppdatert (avbrutt eller feilet). Prøv igjen, eller kjør:\n{cmd}",
-    # --- innstillinger ---
+    # --- settings ---
     "settings": "innstillinger",
     "show tutorial": "vis gjennomgang",
     "todos": "punkter",
@@ -175,7 +175,7 @@ NB = {
     "language": "språk",
     "Restart to change the language.": "Start på nytt for å bytte språk.",
     "welcome!": "velkommen!",
-    # --- katten ---
+    # --- cat ---
     "cat": "katt",
     "reset": "tilbakestill",
     "Back to orange tabby and default phrases": "Tilbake til oransje tabby og standardreplikker",
@@ -220,7 +220,7 @@ NB = {
     "Time for a {n} min break.": "Tid for {n} min pause.",
     "🍅 Break over": "🍅 Pausen er over",
     "Ready for the next focus session?": "Klar for neste fokusøkt?",
-    # --- velkomst ---
+    # --- welcome ---
     "Welcome": "Velkommen",
     "hi there": "hei",
     "Morning Routine is a small daily companion: a morning checklist, a plan for the day, hours and overtime, a pomodoro timer – and a cat.\n\nThis takes one minute.":

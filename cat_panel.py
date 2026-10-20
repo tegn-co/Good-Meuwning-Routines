@@ -1,8 +1,8 @@
-"""Katteinnstillinger for morgen-todo-vinduet (glir ut fra siden, som plan- og pomodoro-panelet).
+"""Cat settings side panel (slides out like the plan and pomodoro panels).
 
-Velg rase, juster fargen på hver del av katten (også konturen), og endre hva katten sier.
-Katten i tittelen oppdateres med en gang, så den fungerer som forhåndsvisning.
-Alt lagres i ~/.config/morgen-todo/cat.json.
+Pick a breed, adjust each part's color (including the outline) and edit what the cat says.
+The title cat updates immediately and serves as the preview.
+Saved in ~/.config/morgen-todo/cat.json.
 """
 import gi
 
@@ -34,7 +34,7 @@ class CatPanel(Gtk.Box):
     def __init__(self, title_cat):
         super().__init__(orientation=Gtk.Orientation.VERTICAL, spacing=6)
         self.title_cat = title_cat
-        self.updating = False  # hindrer at programmatiske endringer lagres som egne valg
+        self.updating = False  # keeps programmatic changes from being saved as user choices
 
         head = Gtk.Box(margin_bottom=6)
         head.append(label("cat", "big"))
@@ -45,13 +45,13 @@ class CatPanel(Gtk.Box):
         head.append(reset)
         self.append(head)
 
-        # --- Rase ---
+        # --- Breed ---
         self.append(label("breed", "num"))
         self.breed = Gtk.DropDown.new_from_strings([_(b) for b in cat.BREEDS] + [_("custom")])
         self.breed.connect("notify::selected", self.on_breed)
         self.append(self.breed)
 
-        # --- Farger ---
+        # --- Colors ---
         colors_title = label("colors", "num")
         colors_title.set_margin_top(10)
         self.append(colors_title)
@@ -66,7 +66,7 @@ class CatPanel(Gtk.Box):
             self.color_btns[key] = btn
         self.append(grid)
 
-        # --- Tilbehør (låses opp av streaks) ---
+        # --- Accessories (unlocked by streaks) ---
         wear_title = label("accessories", "num")
         wear_title.set_margin_top(10)
         self.append(wear_title)
@@ -80,7 +80,7 @@ class CatPanel(Gtk.Box):
             self.wear_checks[key] = (cb, days, name)
         self.refresh_wear()
 
-        # --- Replikker ---
+        # --- Phrases ---
         phrases_title = label("what the cat says", "num")
         phrases_title.set_margin_top(10)
         self.append(phrases_title)
@@ -107,7 +107,7 @@ class CatPanel(Gtk.Box):
         self.updating = False
 
     def refresh_wear(self):
-        """Vis hva som er låst opp (kalles også av vinduet når streaken endrer seg)."""
+        """Show what is unlocked (also called by the window when the streak changes)."""
         self.updating = True
         for key, (cb, days, name) in self.wear_checks.items():
             unlocked = key in cat.UNLOCKED
@@ -131,13 +131,13 @@ class CatPanel(Gtk.Box):
             return
         names = list(cat.BREEDS)
         i = dropdown.get_selected()
-        if i >= len(names):  # «custom» velges automatisk når du endrer en farge
+        if i >= len(names):  # "custom" is selected automatically when a color changes
             return
         cat.SETTINGS["breed"] = names[i]
         cat.COLORS.update(cat.BREEDS[names[i]])
         cat.set_shape(cat.BREED_SHAPES.get(names[i], "normal"))
         self.show_current_settings()
-        self.title_cat.say(_("{breed}!").format(breed=_(names[i])))  # liten bekreftelse fra katten
+        self.title_cat.say(_("{breed}!").format(breed=_(names[i])))
         self.save_and_redraw()
 
     def on_color(self, btn, _, key):

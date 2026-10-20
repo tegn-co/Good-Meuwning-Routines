@@ -1,7 +1,7 @@
 import unittest
 from datetime import date, timedelta
 
-from tests import env  # noqa: F401  (midlertidige mapper)
+from tests import env  # noqa: F401  (temporary dirs)
 import database as db
 
 MON = date(2026, 10, 12)
@@ -25,9 +25,9 @@ class DbTest(unittest.TestCase):
 
     def test_overtime_weekend_and_day_off(self):
         db.save_day(MON, state(hours=9))                     # +1
-        db.set_logged_hours(MON + timedelta(days=1), 3, True)        # fridag: +3
+        db.set_logged_hours(MON + timedelta(days=1), 3, True)        # day off: +3
         db.set_logged_hours(MON + timedelta(days=2), 6, False)       # -2
-        db.set_logged_hours(MON + timedelta(days=5), 2, False)       # lørdag: +2
+        db.set_logged_hours(MON + timedelta(days=5), 2, False)       # Saturday: +2
         s = db.overtime_summary(MON + timedelta(days=6))
         self.assertAlmostEqual(s["total"], 4.0)
         self.assertEqual(s["days_logged"], 4)
@@ -62,13 +62,13 @@ class DbTest(unittest.TestCase):
 
     def test_streak_skips_weekend_and_day_off(self):
         fri = MON + timedelta(days=4)
-        db.save_day(MON + timedelta(days=3), state(complete=True))   # torsdag
-        db.save_day(fri, state(complete=True))                          # fredag
-        db.set_logged_hours(MON + timedelta(days=7), 0, True)                  # mandag: fri
+        db.save_day(MON + timedelta(days=3), state(complete=True))   # Thursday
+        db.save_day(fri, state(complete=True))                          # Friday
+        db.set_logged_hours(MON + timedelta(days=7), 0, True)                  # Monday: day off
         tue = MON + timedelta(days=8)
-        self.assertEqual(db.streak_info(tue, False)["streak"], 2)      # helg + fridag bryter ikke
+        self.assertEqual(db.streak_info(tue, False)["streak"], 2)      # weekend + day off don't break it
         self.assertEqual(db.streak_info(tue, True), {"streak": 3, "best": 3})
-        self.assertEqual(db.streak_info(tue + timedelta(days=2), False), {"streak": 0, "best": 3})  # onsdag mangler
+        self.assertEqual(db.streak_info(tue + timedelta(days=2), False), {"streak": 0, "best": 3})  # Wednesday missing
 
     def test_backup_restore_and_csv(self):
         db.save_day(MON, state(hours=9, routine=[{"id": "a", "text": "Water"}]))
@@ -76,7 +76,7 @@ class DbTest(unittest.TestCase):
         (db.CONFIG_DIR / "theme").write_text("dark")
         zip_path = env.TMP / "backup.zip"
         db.export_backup(zip_path)
-        db.save_day(MON, state(hours=1, routine=[]))                 # endringer etter kopien
+        db.save_day(MON, state(hours=1, routine=[]))                 # changes after the backup
         (db.CONFIG_DIR / "theme").write_text("light")
         db.restore_backup(zip_path)
         d = db.load_day(MON)
@@ -102,7 +102,7 @@ class DbTest(unittest.TestCase):
         os.utime(lock, (time.time() - 600,) * 2)
         db.remove_stale_lock(lock)
         self.assertFalse(lock.exists())
-        db.remove_stale_lock(lock)  # finnes ikke: ingen feil
+        db.remove_stale_lock(lock)  # already gone: no error
 
 
 if __name__ == "__main__":

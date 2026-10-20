@@ -1,7 +1,7 @@
-"""Sjekker om det finnes en nyere versjon på GitHub, og oppdaterer den installerte pakken.
+"""Checks GitHub for a newer version and updates the installed package.
 
-Versjonen står i fila VERSION ved siden av koden (legges inn av build-deb.sh). Kjøres appen fra
-kildekoden, finnes ikke fila, og da sjekkes det ikke.
+The version is read from the VERSION file next to the code (added by build-deb.sh). When running
+from source the file is missing, so no check is done.
 """
 import json
 import os
@@ -19,11 +19,11 @@ CACHE = Path(os.environ.get("XDG_CACHE_HOME", Path.home() / ".cache")) / "morgen
 
 def installed_version():
     if Path("/.flatpak-info").exists():
-        return None  # Flatpak oppdateres med «flatpak update» / ny pakke, ikke herfra
+        return None  # Flatpak updates via "flatpak update" / a new bundle, not from here
     try:
         return VERSION_FILE.read_text().strip()
     except OSError:
-        return None  # kjører fra kildekoden
+        return None  # running from source
 
 
 def parse_version(version):
@@ -31,7 +31,7 @@ def parse_version(version):
 
 
 def latest_version():
-    """Siste release på GitHub, f.eks. «1.1.2» (kalles i bakgrunnstråden)."""
+    """Latest GitHub release, e.g. "1.1.2" (called on the background thread)."""
     req = urllib.request.Request(LATEST_API, headers={"Accept": "application/vnd.github+json",
                                                       "User-Agent": "morgen-todo"})
     with urllib.request.urlopen(req, timeout=8) as r:
@@ -39,7 +39,7 @@ def latest_version():
 
 
 def check_for_newer_version():
-    """(installert, nyeste) hvis det finnes en nyere versjon, ellers None."""
+    """(installed, latest) if a newer version exists, else None."""
     current = installed_version()
     if not current:
         return None
@@ -48,18 +48,18 @@ def check_for_newer_version():
 
 
 def download_latest_package():
-    """Last ned nyeste .deb til cache-mappa (bakgrunnstråden). Returnerer stien."""
+    """Download the latest .deb to the cache dir (background thread). Returns the path."""
     CACHE.mkdir(parents=True, exist_ok=True)
     path = CACHE / "morgen-todo_all.deb"
     req = urllib.request.Request(DEB_URL, headers={"User-Agent": "morgen-todo"})
     with urllib.request.urlopen(req, timeout=60) as r, open(path, "wb") as f:
         shutil.copyfileobj(r, f)
-    path.chmod(0o644)  # apt leser fila som sin egen bruker
+    path.chmod(0o644)  # apt reads the file as its own user
     CACHE.chmod(0o755)
     return path
 
 
 def install_command(path):
-    """Kommando som installerer pakken med et grafisk passordvindu (pkexec), eller None."""
+    """Command that installs the package with a graphical password prompt (pkexec), or None."""
     pkexec = shutil.which("pkexec")
     return [pkexec, "apt-get", "install", "-y", str(path)] if pkexec else None

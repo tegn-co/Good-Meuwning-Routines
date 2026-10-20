@@ -1,5 +1,5 @@
-"""Felles oppsett for testene: egne midlertidige mapper for config/data/timere, så testene aldri
-rører ekte brukerdata, og en falsk systemctl. Importeres før appens moduler."""
+"""Shared test setup: temporary config/data/timer dirs so tests never touch real user data,
+plus a fake systemctl. Import before the app modules."""
 import os
 import sys
 import tempfile
@@ -11,7 +11,7 @@ os.environ["XDG_CONFIG_HOME"] = str(TMP / "config")
 os.environ["XDG_DATA_HOME"] = str(TMP / "data")
 os.environ.pop("MORGEN_TODO_DB", None)
 os.environ.setdefault("GTK_A11Y", "none")
-# Pikselfontene, så tittel og mål blir som i appen (fontconfig leter i $XDG_DATA_HOME/fonts)
+# Pixel fonts, so titles and sizes match the app (fontconfig looks in $XDG_DATA_HOME/fonts)
 (TMP / "data" / "fonts").mkdir(parents=True)
 for ttf in (ROOT / "packaging" / "fonts").glob("*.ttf"):
     (TMP / "data" / "fonts" / ttf.name).write_bytes(ttf.read_bytes())
@@ -26,4 +26,4 @@ schedule.systemctl = lambda *args: (SYSTEMCTL_CALLS.append(args), "Wed 2026-10-2
 
 import database as db  # noqa: E402
 
-assert str(db.DB_PATH).startswith(str(TMP)), "testene må aldri bruke den ekte databasen"
+assert str(db.DB_PATH).startswith(str(TMP)), "tests must never use the real database"

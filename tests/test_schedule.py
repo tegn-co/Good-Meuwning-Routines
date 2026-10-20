@@ -44,7 +44,7 @@ if __name__ == "__main__":
 
 
 class FlatpakSchedulerTest(unittest.TestCase):
-    """Som Flatpak åpner appen selv listen og minner om timer (App.fire_due_reminders)."""
+    """In Flatpak the app itself opens the list and reminds about hours (App.fire_due_reminders)."""
 
     def run_tick(self, now, fired=None):
         import database as db

@@ -1,12 +1,12 @@
-"""Tidspunktene programmet bruker, redigerbare under ⚙ → schedule.
+"""Schedule times, editable under ⚙ → schedule.
 
-Lagres under "schedule" i ~/.config/morgen-todo/config.json:
-  morning – vinduet åpnes (systemd-timeren morgen-todo.timer)
-  hours   – påminnelse om timeføring (morgen-todo-hours.timer)
-  close   – vinduet lagrer og lukker seg selv
-  lunch / lunch_end – katten spiser mellom disse tidene
-  morning_days / hours_days – ukedagene hver påminnelse gjelder (0 = mandag)
-Endringer skrives inn i timerne med apply_reminders().
+Stored under "schedule" in ~/.config/morgen-todo/config.json:
+  morning – window opens (systemd timer morgen-todo.timer)
+  hours   – reminder to log hours (morgen-todo-hours.timer)
+  close   – window saves and closes itself
+  lunch / lunch_end – the cat eats between these times
+  morning_days / hours_days – weekdays for each reminder (0 = Monday)
+apply_reminders() writes changes into the timers.
 """
 import json
 import os
@@ -26,17 +26,17 @@ DEFAULTS = {
 }
 DAY_NAMES = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
 TIMER_DIR = Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config")) / "systemd" / "user"
-PACKAGED_DIR = Path("/usr/lib/systemd/user")  # timerne pakken installerer
-TIMERS = {  # innstilling -> (timer-fil, beskrivelse, Persistent)
-    "morning": ("morgen-todo.timer", "Morgen-todo: åpne listen", True),
-    # Påminnelsen hoppes over hvis maskinen var av, ellers kunne den kommet neste morgen
-    "hours": ("morgen-todo-hours.timer", "Morgen-todo: påminnelse om timeføring", False),
+PACKAGED_DIR = Path("/usr/lib/systemd/user")  # timers installed by the package
+TIMERS = {  # setting -> (timer file, description, Persistent)
+    "morning": ("morgen-todo.timer", "Morning Routine: open the list", True),
+    # Not Persistent: skip the reminder if the machine was off, or it could fire the next morning
+    "hours": ("morgen-todo-hours.timer", "Morning Routine: remind to log hours", False),
 }
 
 
 def load():
     saved = db.load_config().get("schedule", {})
-    if "days" in saved:  # eldre oppsett: felles ukedager for begge påminnelsene
+    if "days" in saved:  # older config: shared weekdays for both reminders
         saved.setdefault("morning_days", saved["days"])
         saved.setdefault("hours_days", saved.pop("days"))
     return {k: saved.get(k, v) for k, v in DEFAULTS.items()}
@@ -55,7 +55,7 @@ def parse_hhmm(hhmm):
 
 
 def next_reminder_time(sch, key, now=None):
-    """Neste gang en påminnelse skal gå (brukes når appen planlegger selv, som Flatpak)."""
+    """Next time a reminder fires (used when the app schedules itself, as in Flatpak)."""
     if not sch[f"{key}_on"] or not sch[f"{key}_days"]:
         return "off"
     now = now or datetime.now()
@@ -68,7 +68,7 @@ def next_reminder_time(sch, key, now=None):
 
 
 def request_autostart(autostart):
-    """Flatpak: be systemet om å starte appen usynlig ved innlogging (Background-portalen)."""
+    """Flatpak: ask to start the app hidden at login (Background portal)."""
     from gi.repository import Gio, GLib
     opts = {
         "reason": GLib.Variant("s", "Open your morning list and remind you to log hours"),
@@ -83,26 +83,26 @@ def request_autostart(autostart):
 
 
 def apply_reminders(schedule):
-    """Skriv tidene inn i systemd-timerne og slå dem av/på. Returnerer neste kjøring per timer.
-    Som Flatpak finnes ingen systemd-timere: appen planlegger selv (App.fire_due_reminders), og ber bare
-    om å bli startet ved innlogging."""
+    """Write the times into the systemd timers and enable/disable them. Returns the next run per timer.
+    Flatpak has no systemd timers: the app schedules itself (App.fire_due_reminders) and only
+    asks to be started at login."""
     if db.IN_FLATPAK:
         request_autostart(any(schedule[f"{k}_on"] and schedule[f"{k}_days"] for k in TIMERS))
         return {k: next_reminder_time(schedule, k) for k in TIMERS}
-    TIMER_DIR.mkdir(parents=True, exist_ok=True)  # finnes ikke hos nye brukere
+    TIMER_DIR.mkdir(parents=True, exist_ok=True)  # missing for new users
     for key, (unit, description, persistent) in TIMERS.items():
-        days = ",".join(DAY_NAMES[d] for d in sorted(schedule[f"{key}_days"])) or "Mon"  # ingen dager = slått av under
+        days = ",".join(DAY_NAMES[d] for d in sorted(schedule[f"{key}_days"])) or "Mon"  # no days = disabled below
         own = TIMER_DIR / unit
         if (PACKAGED_DIR / unit).exists():
-            # Installert pakke: timeren kommer fra pakken, vi legger bare tidspunktet i en drop-in.
-            # Fjernes pakken, forsvinner timeren med den i stedet for å stå igjen og peke på ingenting.
-            if own.exists() and own.read_text().startswith("[Unit]\nDescription=Morgen-todo:"):
-                own.unlink()  # hel timer-fil skrevet av eldre versjoner
+            # Installed package: the timer comes from the package; we only put the time in a drop-in.
+            # If the package is removed, the timer goes with it instead of pointing at nothing.
+            if own.exists() and own.read_text().startswith(("[Unit]\nDescription=Morgen-todo:", "[Unit]\nDescription=Morning Routine:")):
+                own.unlink()  # full timer file written by older versions
             dropin = TIMER_DIR / f"{unit}.d" / "schedule.conf"
             dropin.parent.mkdir(exist_ok=True)
             dropin.write_text(f"[Timer]\nOnCalendar=\nOnCalendar={days} {schedule[key]}\n")
         else:
-            # Kjørt fra kildekoden: skriv hele timeren selv
+            # Running from source: write the whole timer
             own.write_text(
                 f"[Unit]\nDescription={description}\n\n"
                 f"[Timer]\nOnCalendar={days} {schedule[key]}\n"
@@ -112,8 +112,8 @@ def apply_reminders(schedule):
     systemctl("daemon-reload")
     for key, (unit, _, _) in TIMERS.items():
         on = schedule[f"{key}_on"] and schedule[f"{key}_days"]
-        # daemon-reload over er nok til at nytt tidspunkt gjelder; restart ville fått en Persistent-timer
-        # til å kjøre med en gang
+        # daemon-reload is enough to apply the new time; a restart would make a Persistent timer
+        # fire immediately
         systemctl("enable" if on else "disable", "--now", unit)
     return next_timer_runs()
 

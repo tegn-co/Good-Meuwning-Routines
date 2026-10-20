@@ -1,8 +1,8 @@
 #!/bin/sh
-# Kjøres av systemd-timerne: viser et varsel og åpner vinduet.
-#   morgen-todo-remind morning   – morgenlisten
-#   morgen-todo-remind hours     – påminnelse om timeføring
-# Norsk hvis det er valgt i appen (⚙ → language), ellers ut fra systemspråket
+# Run by the systemd timers: shows a notification and opens the window.
+#   morgen-todo-remind morning   – morning list
+#   morgen-todo-remind hours     – reminder to log hours
+# Norwegian if chosen in the app (⚙ → language), otherwise based on the system locale
 CONFIG="${XDG_CONFIG_HOME:-$HOME/.config}/morgen-todo/config.json"
 if grep -q '"language": "nb"' "$CONFIG" 2>/dev/null; then NB=1
 elif grep -q '"language": "en"' "$CONFIG" 2>/dev/null; then NB=

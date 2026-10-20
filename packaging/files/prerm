@@ -1,5 +1,5 @@
 #!/bin/sh
 set -e
-# Fjern de forhåndskompilerte filene postinst laget
+# Remove the bytecode created by postinst
 rm -rf /usr/share/morgen-todo/__pycache__
 exit 0

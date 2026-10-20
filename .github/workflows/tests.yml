@@ -1,4 +1,4 @@
-# Felles testjobb: brukes av ci.yml (push/PR) og release.yml (før en release bygges)
+# Shared test job: used by ci.yml (push/PR) and release.yml (before building a release)
 name: Run tests
 
 on:

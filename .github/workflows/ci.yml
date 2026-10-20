@@ -1,4 +1,4 @@
-# Kjører testene ved hver push og pull request
+# Runs the tests on every push and pull request
 name: Tests
 
 on:

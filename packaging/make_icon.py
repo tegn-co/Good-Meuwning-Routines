@@ -1,7 +1,7 @@
-"""Lager app-ikonet: den sittende pixel-katten (orange tabby) i alle størrelser GNOME bruker.
+"""Renders the app icon: the sitting pixel cat (orange tabby) in every size GNOME uses.
 
-Bruk: python3 make_icon.py <utmappe>   ->  <utmappe>/<N>x<N>/apps/no.zivid.MorgenTodo.png
-Katten skaleres med hele piksler, så ikonet er skarpt i alle størrelser.
+Usage: python3 make_icon.py <outdir>   ->  <outdir>/<N>x<N>/apps/no.zivid.MorgenTodo.png
+Scaled by whole pixels so the icon stays sharp at every size.
 """
 import sys
 from pathlib import Path
@@ -13,7 +13,7 @@ import cat  # noqa: E402
 
 ICON = "no.zivid.MorgenTodo"
 SIZES = [16, 24, 32, 48, 64, 128, 256, 512]
-# Standardkatten, uavhengig av hvordan katten er tilpasset på maskinen som bygger pakken
+# Default cat, regardless of customization on the build machine
 COLORS = dict(cat.BREEDS["orange tabby"])
 SPRITE = cat.add_outline(cat.FILL["sit"][0])
 

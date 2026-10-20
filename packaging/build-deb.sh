@@ -1,6 +1,6 @@
 #!/bin/sh
-# Bygger morgen-todo_<versjon>_all.deb fra koden i mappa over.
-# Bare kode, fonter og ikon kommer med – ingen database, config eller personlige innstillinger.
+# Builds morgen-todo_<version>_all.deb from the code in the parent directory.
+# Only code, fonts and icon are included – no database, config or personal settings.
 set -eu
 VERSION="${1:-1.0.0}"
 HERE="$(cd "$(dirname "$0")" && pwd)"
@@ -16,7 +16,7 @@ install -d "$ROOT/DEBIAN" "$ROOT/usr/share/morgen-todo" "$ROOT/usr/bin" "$ROOT/u
 for f in app.py cat.py cat_panel.py pomodoro_panel.py database.py schedule.py tutorial.py updater.py translations.py weather.py; do
   install -m 644 "$SRC/$f" "$ROOT/usr/share/morgen-todo/$f"
 done
-# Versjonen appen sammenligner med GitHub når den ser etter oppdateringer
+# Version the app compares with GitHub when checking for updates
 echo "$VERSION" > "$ROOT/usr/share/morgen-todo/VERSION"
 chmod 644 "$ROOT/usr/share/morgen-todo/VERSION"
 install -m 755 "$HERE/files/morgen-todo" "$ROOT/usr/bin/morgen-todo"
