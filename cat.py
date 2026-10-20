@@ -755,6 +755,7 @@ class CatRoamer(Gtk.Fixed):
 
     SPEED = 40  # piksler i sekundet langs rammen
     EDGE = 1  # avstand fra kanten til potene
+    HALF = 11 * PX  # halve kattelengden: katten snur i hjørnet når nesen når veggen, så ingenting stikker ut
     BOX = 160  # tegneflaten rundt katten (plass til boble, skål og z-er)
 
     def __init__(self, title):
@@ -774,8 +775,9 @@ class CatRoamer(Gtk.Fixed):
 
     # --- geometri ---
     def sides(self):
+        """Lengden på hver kant katten kan gå langs (midten av katten holder seg en halv katt fra hjørnene)."""
         w, h, m = self.get_width(), self.get_height(), self.EDGE
-        return w - 2 * m, h - 2 * m, m
+        return max(1, w - 2 * m - 2 * self.HALF), max(1, h - 2 * m - 2 * self.HALF), m
 
     def perimeter(self):
         iw, ih, _ = self.sides()
@@ -784,18 +786,18 @@ class CatRoamer(Gtk.Fixed):
     def frame_pose(self, s):
         """(x, y, vinkel) for potene ved posisjon s langs rammen. Vinkelen peker kattens «ned» mot kanten."""
         iw, ih, m = self.sides()
-        w, h = self.get_width(), self.get_height()
+        w, h, e = self.get_width(), self.get_height(), self.HALF
         s %= max(1.0, self.perimeter())
         if s < iw:
-            return m + s, h - m, 0.0  # bunnen, går mot høyre
+            return m + e + s, h - m, 0.0  # bunnen, går mot høyre
         s -= iw
         if s < ih:
-            return w - m, h - m - s, -math.pi / 2  # høyre vegg, klatrer opp
+            return w - m, h - m - e - s, -math.pi / 2  # høyre vegg, klatrer opp
         s -= ih
         if s < iw:
-            return w - m - s, m, math.pi  # taket, opp-ned mot venstre
+            return w - m - e - s, m, math.pi  # taket, opp-ned mot venstre
         s -= iw
-        return m, m + s, math.pi / 2  # venstre vegg, klatrer ned
+        return m, m + e + s, math.pi / 2  # venstre vegg, klatrer ned
 
     def title_pose(self):
         """(x, y, synlig) for kattens poter på tittelen, i lagets koordinater."""
@@ -876,11 +878,15 @@ class CatRoamer(Gtk.Fixed):
             return x, y - self.enter
         e = min(self.hop["t"], 1)
         (x0, y0, _), (x1, y1, _) = self.hop["from"], self.hop["to"]
-        return x0 + (x1 - x0) * e, y0 + (y1 - y0) * e - math.sin(math.pi * e) * 40
+        return x0 + (x1 - x0) * e, y0 + (y1 - y0) * e - math.sin(math.pi * e) * self.hop_lift(y0, y1)
 
     def draw_canvas(self, area, cr, width, height):
         cr.translate(-self.origin[0], -self.origin[1])
         self.draw(area, cr, self.get_width(), self.get_height())
+
+    def hop_lift(self, y0, y1):
+        """Hvor høyt hoppet går: 40 px, men aldri så høyt at katten forsvinner over toppkanten."""
+        return max(0.0, min(40.0, min(y0, y1) - 17 * PX))
 
     def start_hop(self, frm, to, then):
         self.hop = {"from": frm, "to": to, "then": then, "t": 0.0}
@@ -908,7 +914,7 @@ class CatRoamer(Gtk.Fixed):
             e = min(h["t"], 1)
             (x0, y0, a0), (x1, y1, a1) = h["from"], h["to"]
             x = x0 + (x1 - x0) * e
-            y = y0 + (y1 - y0) * e - math.sin(math.pi * e) * 40
+            y = y0 + (y1 - y0) * e - math.sin(math.pi * e) * self.hop_lift(y0, y1)
             angle = a0 if e < 0.5 else a1
             sprite = SPRITES["run"][0]
             flip = x1 < x0
