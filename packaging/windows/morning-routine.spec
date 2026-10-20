@@ -2,7 +2,7 @@
 import os
 
 root = os.path.abspath(os.path.join(SPECPATH, "..", ".."))
-modules = ["cat", "cat_panel", "pomodoro_panel", "database", "schedule", "tutorial", "updater",
+modules = ["cat", "cat_tricks", "cat_panel", "pomodoro_panel", "database", "schedule", "tutorial", "updater",
            "translations", "weather", "platforms"]
 
 a = Analysis(
