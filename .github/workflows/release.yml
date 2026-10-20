@@ -36,7 +36,7 @@ jobs:
         run: |
           sudo apt-get install -y ./packaging/dist/morgen-todo_all.deb
           dpkg -s morgen-todo | grep -E '^(Status|Version)'
-          for f in /usr/share/morgen-todo/*.py; do python3 -c "import ast; ast.parse(open('$f').read())"; done
+          cd /tmp && python3 -c "import sys; sys.path.insert(0, '/usr/share/morgen-todo'); import app, cat, database, platforms, updater"
 
       - uses: actions/upload-artifact@v4
         with:

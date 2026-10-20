@@ -15,7 +15,7 @@ modules:
   - name: morgen-todo
     buildsystem: simple
     build-commands:
-      - install -Dm644 -t /app/share/morgen-todo app.py cat.py cat_panel.py pomodoro_panel.py database.py schedule.py tutorial.py updater.py translations.py weather.py
+      - install -Dm644 -t /app/share/morgen-todo app.py cat.py cat_panel.py pomodoro_panel.py database.py schedule.py tutorial.py updater.py translations.py weather.py platforms.py
       - python3 -m compileall -q /app/share/morgen-todo
       - install -Dm755 packaging/flatpak/morgen-todo.sh /app/bin/morgen-todo
       - install -Dm644 packaging/files/no.zivid.MorgenTodo.desktop /app/share/applications/no.zivid.MorgenTodo.desktop
