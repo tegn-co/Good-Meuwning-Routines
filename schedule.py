@@ -26,6 +26,7 @@ DEFAULTS = {
 }
 DAY_NAMES = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
 TIMER_DIR = Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config")) / "systemd" / "user"
+PACKAGED_DIR = Path("/usr/lib/systemd/user")  # timerne pakken installerer
 TIMERS = {  # innstilling -> (timer-fil, beskrivelse, Persistent)
     "morning": ("morgen-todo.timer", "Morgen-todo: åpne listen", True),
     # Påminnelsen hoppes over hvis maskinen var av, ellers kunne den kommet neste morgen
@@ -58,12 +59,23 @@ def apply_timers(schedule):
     TIMER_DIR.mkdir(parents=True, exist_ok=True)  # finnes ikke hos nye brukere
     for key, (unit, description, persistent) in TIMERS.items():
         days = ",".join(DAY_NAMES[d] for d in sorted(schedule[f"{key}_days"])) or "Mon"  # ingen dager = slått av under
-        (TIMER_DIR / unit).write_text(
-            f"[Unit]\nDescription={description}\n\n"
-            f"[Timer]\nOnCalendar={days} {schedule[key]}\n"
-            + ("Persistent=true\n" if persistent else "")
-            + "\n[Install]\nWantedBy=timers.target\n"
-        )
+        own = TIMER_DIR / unit
+        if (PACKAGED_DIR / unit).exists():
+            # Installert pakke: timeren kommer fra pakken, vi legger bare tidspunktet i en drop-in.
+            # Fjernes pakken, forsvinner timeren med den i stedet for å stå igjen og peke på ingenting.
+            if own.exists() and own.read_text().startswith("[Unit]\nDescription=Morgen-todo:"):
+                own.unlink()  # hel timer-fil skrevet av eldre versjoner
+            dropin = TIMER_DIR / f"{unit}.d" / "schedule.conf"
+            dropin.parent.mkdir(exist_ok=True)
+            dropin.write_text(f"[Timer]\nOnCalendar=\nOnCalendar={days} {schedule[key]}\n")
+        else:
+            # Kjørt fra kildekoden: skriv hele timeren selv
+            own.write_text(
+                f"[Unit]\nDescription={description}\n\n"
+                f"[Timer]\nOnCalendar={days} {schedule[key]}\n"
+                + ("Persistent=true\n" if persistent else "")
+                + "\n[Install]\nWantedBy=timers.target\n"
+            )
     systemctl("daemon-reload")
     for key, (unit, _, _) in TIMERS.items():
         on = schedule[f"{key}_on"] and schedule[f"{key}_days"]
@@ -82,4 +94,4 @@ def next_runs():
 
 
 def systemctl(*args):
-    return subprocess.run(["systemctl", "--user", *args], capture_output=True, text=True, timeout=10).stdout
+    return subprocess.run(["systemctl", "--user", *args], capture_output=True, text=True, timeout=5).stdout

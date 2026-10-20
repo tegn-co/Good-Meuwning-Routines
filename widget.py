@@ -249,6 +249,8 @@ class Widget(Adw.ApplicationWindow):
         self.hours.set_hexpand(True)
         self.hours.set_halign(Gtk.Align.END)
         self.hours.connect("value-changed", self.on_hours_changed)
+        # Enter fører timene selv om tallet ikke endret seg (ellers kan man ikke føre nøyaktig 0)
+        self.hours.connect("activate", lambda spin: self.state["hours"] is None and self.on_hours_changed(spin))
         row.append(self.hours)
         self.hours_box.append(row)
         self.today_diff = label("", "detail")
@@ -303,23 +305,38 @@ class Widget(Adw.ApplicationWindow):
         # Lagre først; lukk bare hvis lagringen gikk bra, ellers prøv igjen om 30 sekunder
         if not self.loaded:
             return True
+        self.hours.update()
         self.save_now(then=self.close)
         return True
 
     def check_new_day(self):
         """Står vinduet åpent over midnatt, lagres gårsdagen og dagens liste lastes (med overførte planpunkter)."""
-        if date.today() == self.day:
+        if date.today() == self.day or getattr(self, "changing_day", False):
             return
+
+        def go():
+            self.changing_day = False
+            self.day = date.today()
+            self.load()
+
+        def retry():
+            self.changing_day = False  # gårsdagen ble ikke lagret; check_clock prøver igjen om 30 s
+
         if self.loaded:
-            self.save_now()  # køen kjører denne før lastingen under, og den lagrer på gårsdagens dato
-        self.day = date.today()
-        self.load()
+            self.changing_day = True
+            self.hours.update()
+            self.save_now(then=go, failed=retry)
+        else:
+            go()
 
     def on_close(self, _):
-        # Lagre ventende endringer før vinduet lukkes (venter på databasen, maks 10 sekunder)
-        if self.save_id and self.loaded:
-            GLib.source_remove(self.save_id)
-            self.save_id = 0
+        # Lagre før vinduet lukkes og vent på databasen (maks 10 s), også om en lagring allerede er i gang.
+        # Ellers kan bakgrunnstråden bli avbrutt midt i skrivingen når appen avslutter.
+        if self.loaded:
+            self.hours.update()  # tall skrevet i timefeltet uten Enter
+            if self.save_id:
+                GLib.source_remove(self.save_id)
+                self.save_id = 0
             try:
                 self.db.run_sync(db.save_day, self.day, self.snapshot())
             except Exception:
@@ -342,6 +359,7 @@ class Widget(Adw.ApplicationWindow):
         d = self.day
         self.date_lbl.set_label(f"{DAYS[d.weekday()]} {d.day} {MONTHS[d.month - 1]}")
         self.set_status(True, "○ loading…")
+        self.scroll.set_sensitive(False)  # det som skrives nå, ville blitt erstattet når dataene kommer
         self.db.submit(db.load_day, d, callback=lambda result, err: self.on_loaded(d, result, err))
 
     def on_loaded(self, day, result, err):
@@ -381,7 +399,7 @@ class Widget(Adw.ApplicationWindow):
         # Vent til det har vært stille i SAVE_DELAY sekunder før vi skriver til databasen
         self.save_id = GLib.timeout_add_seconds(SAVE_DELAY, self.save_now)
 
-    def save_now(self, then=None):
+    def save_now(self, then=None, failed=None):
         if self.save_id:
             GLib.source_remove(self.save_id)
         self.save_id = 0
@@ -392,6 +410,8 @@ class Widget(Adw.ApplicationWindow):
         def done(_, err):
             if err:
                 self.set_status(False, f"● not saved – {err}")
+                if failed:
+                    failed()
                 return
             if day == self.day:
                 self.set_status(True, "● saved")
@@ -461,6 +481,7 @@ class Widget(Adw.ApplicationWindow):
             return
         self.state["hours"] = spin.get_value()
         self.hours_box.remove_css_class("attention")
+        self.show_hours(None, None)
         self.save()
 
     # --- rekkefølge og dra-og-slipp ---
@@ -518,9 +539,9 @@ class Widget(Adw.ApplicationWindow):
         item.add_controller(target)
 
     def move_item(self, dragged, target, after):
-        if dragged == target:
-            return
         order = self.order()
+        if dragged == target or dragged not in order or target not in order:
+            return  # f.eks. tekst dratt inn fra et tekstfelt
         order.remove(dragged)
         order.insert(order.index(target) + (1 if after else 0), dragged)
         self.state["order"] = order
@@ -597,7 +618,7 @@ class Widget(Adw.ApplicationWindow):
         self.past_off = Gtk.CheckButton(label="day off")
         self.past_off.add_css_class("detail")
         row.append(self.past_off)
-        save = Gtk.Button(label="save", hexpand=True, halign=Gtk.Align.END)
+        save = self.past_save_btn = Gtk.Button(label="save", hexpand=True, halign=Gtk.Align.END, sensitive=False)
         save.add_css_class("flat")
         save.connect("clicked", self.on_past_save)
         row.append(save)
@@ -620,8 +641,8 @@ class Widget(Adw.ApplicationWindow):
         def time_picker(key):
             t = schedule.parse(sch[key])
             hh = Gtk.SpinButton.new_with_range(0, 23, 1)
-            mm = Gtk.SpinButton.new_with_range(0, 55, 5)
-            for spin, value in ((hh, t.hour), (mm, t.minute - t.minute % 5)):
+            mm = Gtk.SpinButton.new_with_range(0, 59, 5)
+            for spin, value in ((hh, t.hour), (mm, t.minute)):
                 spin.set_value(value)
                 spin.set_wrap(True)
                 # Loddrett (+ over, − under) og to tegn bred, så fire felt får plass i sidepanelet
@@ -690,11 +711,17 @@ class Widget(Adw.ApplicationWindow):
         else:
             self.update_hours()
         self.apply_schedule(sch)
+
+        def timers_done(_, err):
+            if err:
+                self.set_status(False, f"● reminders could not be set – {err}")
+
+        self.db.submit(schedule.apply_timers, sch, callback=timers_done)
         # Oppdater schedule-feltene på ⚙-siden med det som ble valgt
         for key, (on, hh, mm) in self.sched_widgets.items():
             t = schedule.parse(sch[key])
             hh.set_value(t.hour)
-            mm.set_value(t.minute - t.minute % 5)
+            mm.set_value(t.minute)
             if on is not None:
                 on.set_active(sch[f"{key}_on"])
         if problems:
@@ -714,14 +741,22 @@ class Widget(Adw.ApplicationWindow):
             return
         try:
             schedule.save(sch)
-            runs = schedule.apply_timers(sch)
-        except Exception as e:  # noqa: BLE001 – vises i panelet
+        except OSError as e:
             self.sched_status.set_label(f"not saved – {e}")
             return
         self.apply_schedule(sch)
-        nxt = lambda v: v.rsplit(" ", 1)[0] if v != "off" else "off"
-        close = f"{self.close_at:%a %H:%M}" if self.close_at else "off"
-        self.sched_status.set_label(f"saved · next open: {nxt(runs['morning'])} · reminder: {nxt(runs['hours'])} · close: {close}")
+        self.sched_status.set_label("saving…")
+
+        def done(runs, err):
+            if err:
+                self.sched_status.set_label(f"saved, but reminders could not be set – {err}")
+                return
+            nxt = lambda v: v.rsplit(" ", 1)[0] if v != "off" else "off"
+            close = f"{self.close_at:%a %H:%M}" if self.close_at else "off"
+            self.sched_status.set_label(f"saved · next open: {nxt(runs['morning'])} · reminder: {nxt(runs['hours'])} · close: {close}")
+
+        # systemctl kjøres i bakgrunnstråden, så vinduet ikke henger om systemd svarer tregt
+        self.db.submit(schedule.apply_timers, sch, callback=done)
 
     def past_day(self):
         d = self.past_cal.get_date()
@@ -729,6 +764,7 @@ class Widget(Adw.ApplicationWindow):
 
     def on_past_day_selected(self, cal):
         day = self.past_day()
+        self.past_save_btn.set_sensitive(False)  # låst til dagens verdier er hentet, så de ikke lagres på feil dag
         if day == self.day:
             self.past_status.set_label("Today: use the hours field in the list.")
             return
@@ -742,6 +778,7 @@ class Widget(Adw.ApplicationWindow):
             self.past_off.set_active(result["day_off"])
             logged = "not logged" if result["hours"] is None else f"logged {result['hours']:g} h"
             self.past_status.set_label(f"{day:%a %d %b}: {logged} · expected {db.expected_for(day, result['day_off']):g} h")
+            self.past_save_btn.set_sensitive(True)
 
         self.db.submit(db.get_hours, day, callback=show)
 
@@ -950,7 +987,7 @@ class App(Adw.Application):
 
     def do_command_line(self, cmd):
         # Kun ett vindu: åpner man på nytt, vises det eksisterende. --hours = påminnelsen kl 15:00
-        win = self.get_active_window()
+        win = getattr(self, "win", None)
         if not win:
             display = Gdk.Display.get_default()
             self.colors = Gtk.CssProvider()
@@ -960,7 +997,7 @@ class App(Adw.Application):
             Gtk.StyleContext.add_provider_for_display(display, css, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION + 1)
             # --cat=<navn> tvinger en bestemt katteanimasjon (for testing)
             cat = next((a.split("=", 1)[1] for a in cmd.get_arguments() if a.startswith("--cat=")), None)
-            win = Widget(self, cat)
+            win = self.win = Widget(self, cat)
             Adw.StyleManager.get_default().connect("notify::dark", lambda *_: self.apply_colors())
             try:
                 theme = THEME_FILE.read_text().strip()
@@ -981,7 +1018,7 @@ class App(Adw.Application):
         self.theme = name
         _, icon, scheme = next(t for t in THEMES if t[0] == name)
         Adw.StyleManager.get_default().set_color_scheme(scheme)
-        if win := self.get_active_window():
+        if win := getattr(self, "win", None):
             win.theme_btn.set_label(icon)
             win.theme_btn.set_tooltip_text(f"Theme: {name}")
         self.apply_colors()
@@ -997,7 +1034,7 @@ class App(Adw.Application):
 
     def apply_colors(self):
         self.colors.load_from_string("".join(f"@define-color mt_{k} {v};\n" for k, v in palette().items()))
-        if win := self.get_active_window():
+        if win := getattr(self, "win", None):
             win.update_progress()
 
 

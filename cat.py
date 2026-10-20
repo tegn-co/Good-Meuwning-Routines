@@ -696,11 +696,11 @@ class TitleCat(Gtk.DrawingArea):
         if anim == "eat":
             # Skåla foran hodet (tegnes over så hodet ser ut til å være nede i den); maten minker utover timen
             # Hvor langt i lunsjen vi er (0–1); maten minker i tre trinn
-            if self.forced == "eat":
-                part = (self.t / 15) % 1
+            if self.forced == "eat" or self.mode == "eat":
+                part = (self.t / 15) % 1  # testing eller lang pomodoro-pause: ikke knyttet til lunsjtiden
             else:
                 part = self.lunch_minute(datetime.now()) / self.lunch_length()
-            bowl = BOWLS[min(2, int(part * 3))]
+            bowl = BOWLS[max(0, min(2, int(part * 3)))]
             bx = self.x + 16 * PX
             self.blit(cr, bowl, bx, top - size(bowl)[1] * PX + PX)
             # «nom» som stiger opp innimellom
@@ -840,6 +840,7 @@ class CatRoamer(Gtk.Fixed):
                     s, d = 2 * iw + ih + max(0, ty - m), 1
                 else:
                     s, d = iw + (ih - max(0, ty - m)), -1
+                self.enter = 0.0  # kan være igjen fra en avbrutt inn-klatring
                 self.start_hop((tx, ty, 0.0), self.frame_pose(s), "frame")
                 self.s, self.d = s, d
         elif self.mode == "frame":
@@ -848,7 +849,9 @@ class CatRoamer(Gtk.Fixed):
             else:
                 self.s = (self.s + self.d * self.SPEED * dt) % max(1.0, self.perimeter())
             if not want_frame:
-                self.start_hop(self.frame_pose(self.s), (tx, ty, 0.0), "title")
+                x, y = self.anchor()  # der katten faktisk er (også midt i inn-klatringen)
+                self.start_hop((x, y, self.frame_pose(self.s)[2]), (tx, ty, 0.0), "title")
+                self.enter = 0.0
         elif self.mode == "hop":
             self.hop["t"] += dt / 0.7
             if self.hop["then"] == "title":

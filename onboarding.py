@@ -66,7 +66,7 @@ def time_picker(hhmm):
     t = schedule.parse(hhmm)
     box = Gtk.Box(spacing=2, hexpand=True, halign=Gtk.Align.END)
     spins = []
-    for value, top, step in ((t.hour, 23, 1), (t.minute - t.minute % 5, 55, 5)):
+    for value, top, step in ((t.hour, 23, 1), (t.minute, 59, 5)):
         spin = Gtk.SpinButton.new_with_range(0, top, step)
         spin.set_value(value)
         spin.set_wrap(True)
@@ -187,11 +187,7 @@ class Onboarding(Adw.Window):
         db.update_config(onboarded=True, expected_hours=expected)
         db.EXPECTED_HOURS = expected
         schedule.save(sch)
-        problems = []
-        try:
-            schedule.apply_timers(sch)
-        except Exception as e:  # noqa: BLE001 – f.eks. uten systemd; appen virker likevel
-            problems.append(f"reminders: {e}")
+        problems = []  # timerne settes av hovedvinduet i bakgrunnen (on_done), så dette vinduet ikke fryser
         if self.pin.get_visible() and self.pin.get_active():
             try:
                 pin_to_dock()

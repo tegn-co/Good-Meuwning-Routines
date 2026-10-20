@@ -1,0 +1,10 @@
+[Unit]
+Description=Morning Routine: remind to log hours
+
+[Timer]
+# Standardtid; brukerens egne tider legges i ~/.config/systemd/user/morgen-todo-hours.timer.d/schedule.conf
+# Ikke Persistent: var maskinen av kl 15, skal påminnelsen ikke komme neste morgen
+OnCalendar=Mon..Fri 15:00
+
+[Install]
+WantedBy=timers.target

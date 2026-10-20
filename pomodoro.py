@@ -62,6 +62,7 @@ class PomodoroPanel(Gtk.Box):
         self.ends_at = None  # satt når klokka går (veggklokke, så den tåler at maskinen sover)
         self.done_in_cycle = 0
         self.today = self.load_stats()
+        self.stats_date = date.today()
 
         head = Gtk.Box(margin_bottom=4)
         head.append(label("pomodoro", "big"))
@@ -174,7 +175,15 @@ class PomodoroPanel(Gtk.Box):
         self.refresh()
         return True
 
+    def roll_over_day(self):
+        """Står vinduet åpent over midnatt, begynner tellingen på nytt for den nye dagen."""
+        if date.today() != self.stats_date:
+            self.stats_date = date.today()
+            self.today = 0
+            self.done_in_cycle = 0
+
     def finish_phase(self):
+        self.roll_over_day()
         if self.phase == "focus":
             self.today += 1
             self.done_in_cycle += 1
@@ -195,6 +204,7 @@ class PomodoroPanel(Gtk.Box):
         self.ends_at = datetime.now() + self.remaining if autostart else None
 
     def refresh(self):
+        self.roll_over_day()
         left = self.left()
         self.time.set_label(self.clock())
         total = self.full_remaining.total_seconds()

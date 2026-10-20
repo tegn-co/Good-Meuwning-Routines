@@ -18,7 +18,8 @@ for f in widget.py cat.py cat_settings.py pomodoro.py db.py schedule.py onboardi
 done
 install -m 755 "$HERE/files/morgen-todo" "$ROOT/usr/bin/morgen-todo"
 install -m 755 "$HERE/files/morgen-todo-remind" "$ROOT/usr/lib/morgen-todo/morgen-todo-remind"
-install -m 644 "$HERE/files/morgen-todo.service" "$HERE/files/morgen-todo-hours.service" "$ROOT/usr/lib/systemd/user/"
+install -m 644 "$HERE/files/morgen-todo.service" "$HERE/files/morgen-todo-hours.service" \
+  "$HERE/files/morgen-todo.timer" "$HERE/files/morgen-todo-hours.timer" "$ROOT/usr/lib/systemd/user/"
 install -m 644 "$HERE/files/no.zivid.MorgenTodo.desktop" "$ROOT/usr/share/applications/"
 install -m 644 "$HERE/fonts/Silkscreen-Regular.ttf" "$HERE/fonts/JetBrainsMono.ttf" "$ROOT/usr/share/fonts/truetype/morgen-todo/"
 python3 "$HERE/make_icon.py" "$ROOT/usr/share/icons/hicolor"

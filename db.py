@@ -58,16 +58,38 @@ def on_network_fs(path):
     return fstype in NETWORK_FS
 
 
+def server_now(directory):
+    """Klokka på filserveren (mtime på en fil vi lager der), så maskiner med feil klokke ikke tar andres låser."""
+    probe = directory / f".morgen-todo-clock-{os.getpid()}"
+    probe.touch()
+    try:
+        return probe.stat().st_mtime
+    finally:
+        probe.unlink(missing_ok=True)
+
+
+def remove_stale_lock(lock):
+    try:
+        if lock.exists() and server_now(lock.parent) - lock.stat().st_mtime > STALE_LOCK_SECONDS:
+            lock.rmdir() if lock.is_dir() else lock.unlink()
+    except FileNotFoundError:
+        pass  # låsen ble frigjort (eller ryddet av en annen) i mellomtiden
+
+
+def add_column(conn, sql):
+    """ALTER TABLE som tåler at en annen maskin la til kolonnen samtidig (delt database)."""
+    try:
+        conn.execute(sql)
+    except sqlite3.OperationalError as e:
+        if "duplicate column" not in str(e):
+            raise
+
+
 def connect():
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
     if on_network_fs(DB_PATH.parent):
         # Vanlig SQLite-låsing virker ikke på CIFS; bruk lock-filer, og fjern en lås som er blitt liggende
-        lock = Path(f"{DB_PATH}.lock")
-        if lock.exists() and time.time() - lock.stat().st_mtime > STALE_LOCK_SECONDS:
-            if lock.is_dir():
-                lock.rmdir()
-            else:
-                lock.unlink()
+        remove_stale_lock(Path(f"{DB_PATH}.lock"))
         conn = sqlite3.connect(f"file:{DB_PATH}?vfs=unix-dotfile", uri=True, timeout=5)
     else:
         conn = sqlite3.connect(DB_PATH, timeout=5)
@@ -83,10 +105,19 @@ def connect():
     )
     cols = [c[1] for c in conn.execute("PRAGMA table_info(days)")]
     if "hours" not in cols:
-        conn.execute("ALTER TABLE days ADD COLUMN hours REAL")
+        add_column(conn, "ALTER TABLE days ADD COLUMN hours REAL")
     if "day_off" not in cols:
         # Fridag (ferie, syk, helligdag): ingen forventet arbeidstid den dagen
-        conn.execute("ALTER TABLE days ADD COLUMN day_off INTEGER NOT NULL DEFAULT 0")
+        add_column(conn, "ALTER TABLE days ADD COLUMN day_off INTEGER NOT NULL DEFAULT 0")
+    if "expected" not in cols:
+        # Forventet tid lagres per dag, så en ny arbeidsdag-lengde ikke endrer gammel overtid.
+        # Eksisterende dager får dagens regel.
+        add_column(conn, "ALTER TABLE days ADD COLUMN expected REAL")
+        conn.execute(
+            """UPDATE days SET expected = CASE WHEN day_off = 1 OR strftime('%w', date) IN ('0', '6')
+                                               THEN 0 ELSE ? END
+               WHERE expected IS NULL AND hours IS NOT NULL""", (EXPECTED_HOURS,))
+        conn.commit()
     # Rekkefølgen på punktene i listen (faste punkter og rutinepunkter), lik for alle dager
     conn.execute("CREATE TABLE IF NOT EXISTS item_order (key TEXT PRIMARY KEY, position INTEGER NOT NULL)")
     # Faste punkter (01–05) som er slettet i settings; kan gjenopprettes
@@ -137,17 +168,20 @@ def load_day(day):
         order = [r[0] for r in conn.execute("SELECT key FROM item_order ORDER BY position")]
         hidden = [r[0] for r in conn.execute("SELECT key FROM hidden_items")]
         prev = None
-        if not row:
+        # En rad uten noe i listen (bare timer ført under ⚙, f.eks. på forhånd) regnes som en ny dag
+        fresh = not row or (row[0] == "{}" and row[1] == "" and row[2] == "[]")
+        if fresh:
             # Siste dag listen faktisk ble brukt (ikke rader som bare har timer ført i settings)
             prev = conn.execute(
                 """SELECT plan, checks FROM days WHERE date < ? AND (plan != '' OR checks != '{}')
                    ORDER BY date DESC LIMIT 1""", (day.isoformat(),)
             ).fetchone()
     shared = {"routine": routine, "order": order, "hidden": hidden}
-    if not row:
-        # Ny dag: uferdige plan-oppgaver fra forrige dag blir med
+    if fresh:
+        # Ny dag: uferdige plan-oppgaver fra forrige dag blir med (timer ført på forhånd beholdes)
         plan = "\n".join(f"- {t}" for t in unfinished_plan(*prev)) if prev else ""
-        return {"checks": {}, "plan": plan, "meetings": [], "hours": None, "day_off": False, **shared}
+        hours, day_off = (row[3], bool(row[4])) if row else (None, False)
+        return {"checks": {}, "plan": plan, "meetings": [], "hours": hours, "day_off": day_off, **shared}
     return {"checks": json.loads(row[0]), "plan": row[1], "meetings": json.loads(row[2]),
             "hours": row[3], "day_off": bool(row[4]), **shared}
 
@@ -155,11 +189,12 @@ def load_day(day):
 def save_day(day, state):
     with session() as conn:
         conn.execute(
-            """INSERT INTO days (date, checks, plan, meetings, updated_at, hours, day_off)
-               VALUES (?, ?, ?, ?, ?, ?, ?)
+            """INSERT INTO days (date, checks, plan, meetings, updated_at, hours, day_off, expected)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                ON CONFLICT(date) DO UPDATE SET
                  checks = excluded.checks, plan = excluded.plan, meetings = excluded.meetings,
-                 updated_at = excluded.updated_at, hours = excluded.hours, day_off = excluded.day_off""",
+                 updated_at = excluded.updated_at, hours = excluded.hours, day_off = excluded.day_off,
+                 expected = excluded.expected""",
             (
                 day.isoformat(),
                 json.dumps(state["checks"]),
@@ -168,6 +203,7 @@ def save_day(day, state):
                 datetime.now().isoformat(timespec="seconds"),
                 state["hours"],
                 int(bool(state.get("day_off"))),
+                expected_for(day, state.get("day_off")),
             ),
         )
         conn.execute("DELETE FROM hidden_items")
@@ -190,10 +226,11 @@ def set_hours(day, hours, day_off):
     """Før timer for en annen dag (endrer bare timer og fridag, ikke listen)."""
     with session() as conn:
         conn.execute(
-            """INSERT INTO days (date, updated_at, hours, day_off) VALUES (?, ?, ?, ?)
+            """INSERT INTO days (date, updated_at, hours, day_off, expected) VALUES (?, ?, ?, ?, ?)
                ON CONFLICT(date) DO UPDATE SET hours = excluded.hours, day_off = excluded.day_off,
-                                               updated_at = excluded.updated_at""",
-            (day.isoformat(), datetime.now().isoformat(timespec="seconds"), hours, int(day_off)),
+                                               updated_at = excluded.updated_at, expected = excluded.expected""",
+            (day.isoformat(), datetime.now().isoformat(timespec="seconds"), hours, int(day_off),
+             expected_for(day, day_off)),
         )
 
 
@@ -205,23 +242,23 @@ def set_opening_balance(hours):
 
 
 def summary(day):
-    """Overtid (timer minus forventet tid) totalt, denne uka og denne måneden; bare dager med førte timer.
-    Helg og fridager har forventet tid 0, så timer da teller som overtid."""
+    """Overtid (timer minus forventet tid) totalt, denne uka og denne måneden; bare dager med førte timer,
+    og ikke dager fram i tid. Helg og fridager har forventet tid 0, så timer da teller som overtid."""
     week_start = (day - timedelta(days=day.weekday())).isoformat()
     month_start = day.replace(day=1).isoformat()
     with session() as conn:
         total, week, month, days = conn.execute(
             """WITH d AS (
-                 SELECT date, hours - CASE WHEN day_off = 1 OR strftime('%w', date) IN ('0', '6')
-                                           THEN 0 ELSE :e END AS diff
-                 FROM days WHERE hours IS NOT NULL
+                 SELECT date, hours - COALESCE(expected, CASE WHEN day_off = 1 OR strftime('%w', date) IN ('0', '6')
+                                                         THEN 0 ELSE :e END) AS diff
+                 FROM days WHERE hours IS NOT NULL AND date <= :d
                )
                SELECT COALESCE(SUM(diff), 0),
                       COALESCE(SUM(CASE WHEN date >= :w THEN diff END), 0),
                       COALESCE(SUM(CASE WHEN date >= :m THEN diff END), 0),
                       COUNT(*)
                FROM d""",
-            {"e": EXPECTED_HOURS, "w": week_start, "m": month_start},
+            {"e": EXPECTED_HOURS, "w": week_start, "m": month_start, "d": day.isoformat()},
         ).fetchone()
         row = conn.execute("SELECT value FROM settings WHERE key = 'opening_balance'").fetchone()
     opening = row[0] if row else 0
