@@ -43,7 +43,7 @@ headerbar { background: @mt_bg; box-shadow: none; border: none; min-height: 32px
 .muted { color: @mt_muted; }
 .num { font-family: "Silkscreen"; font-size: 10px; color: @mt_muted; }
 .title { font-weight: 500; font-size: 13px; }
-.done .title { color: @mt_muted; text-decoration: line-through; }
+.done .title { color: @mt_muted; }
 .detail { color: @mt_muted; font-size: 11px; }
 .item { border-top: 1px solid @mt_line; padding: 10px 0; }
 .blocks { font-family: "Silkscreen"; letter-spacing: 2px; }
@@ -56,7 +56,7 @@ headerbar { background: @mt_bg; box-shadow: none; border: none; min-height: 32px
 button.danger { color: @mt_accent; }
 .setrow { border-top: 1px solid @mt_line; padding: 6px 0; }
 .side checkbutton label { font-size: 13px; }
-.side checkbutton:checked label { color: @mt_muted; text-decoration: line-through; }
+.side checkbutton:checked label { color: @mt_muted; }
 .hours { border-top: 1px solid @mt_line; border-bottom: 1px solid @mt_line; padding: 12px 0; margin-top: 4px; }
 .hours.attention { border-color: @mt_accent; }
 .big { font-family: "Silkscreen"; font-size: 18px; }
@@ -82,6 +82,13 @@ THEMES = [("system", "◐", Adw.ColorScheme.DEFAULT), ("light", "☀", Adw.Color
 
 def palette():
     return PALETTES["dark" if Adw.StyleManager.get_default().get_dark() else "light"]
+
+
+def set_struck(lbl, text, on):
+    """Gjennomstreking settes i selve teksten (ikke via CSS), så den alltid forsvinner igjen når
+    avkryssingen fjernes – GTK tegnet ikke alltid om teksten når bare CSS-streken skulle bort."""
+    escaped = GLib.markup_escape_text(text)
+    lbl.set_markup(f"<s>{escaped}</s>" if on else escaped)
 
 
 def label(text, *classes, wrap=False):
@@ -186,6 +193,7 @@ class Widget(Adw.ApplicationWindow):
         self.list_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
         body.append(self.list_box)
         self.items = {}
+        self.titles = {}  # tittel-etiketten til de faste punktene (gjennomstrekes når de er krysset av)
         self.nums = {}  # nummer-etiketten per punkt (oppdateres når rekkefølgen endres)
         self.routine_widgets = {}
         for i, (key, text, details) in enumerate(ITEMS, 1):
@@ -193,7 +201,8 @@ class Widget(Adw.ApplicationWindow):
             item.add_css_class("item")
             row = Gtk.Box(spacing=10)
             row.append(self.drag_handle(key, item))
-            row.append(label(text, "title", wrap=True))
+            self.titles[key] = label(text, "title", wrap=True)
+            row.append(self.titles[key])
             check = Gtk.CheckButton(hexpand=True, halign=Gtk.Align.END)
             check.connect("toggled", self.on_item_toggled, key)
             if key == "plan":
@@ -436,6 +445,7 @@ class Widget(Adw.ApplicationWindow):
         for key, (item, check, extra) in self.items.items():
             on = check.get_active()
             (item.add_css_class if on else item.remove_css_class)("done")
+            set_struck(self.titles[key], dict((k, t) for k, t, _ in ITEMS)[key], on)
             extra.set_visible(not on)
 
     def update_hours(self):
@@ -560,6 +570,7 @@ class Widget(Adw.ApplicationWindow):
             row = Gtk.Box(spacing=10)
             row.append(self.drag_handle(key, item))
             title = label(r["text"], "title", wrap=True)
+            set_struck(title, r["text"], done)
             title.set_hexpand(True)
             row.append(title)
             check = Gtk.CheckButton(active=done)
@@ -887,6 +898,7 @@ class Widget(Adw.ApplicationWindow):
         for text in items:
             cb = Gtk.CheckButton(label=text, active=bool(self.state["checks"].get(f"p:{text}")))
             cb.get_last_child().set_wrap(True)
+            set_struck(cb.get_last_child(), text, cb.get_active())
             cb.connect("toggled", self.on_plan_item_toggled, text)
             self.plan_list.append(cb)
         done = sum(bool(self.state["checks"].get(f"p:{t}")) for t in items)
@@ -965,6 +977,7 @@ class Widget(Adw.ApplicationWindow):
             box.append(head)
             for j, p in enumerate(PREP):
                 cb = Gtk.CheckButton(label=p, active=j < len(m["done"]) and bool(m["done"][j]))
+                set_struck(cb.get_last_child(), p, cb.get_active())
                 cb.connect("toggled", self.on_prep_toggled, m, j)
                 box.append(cb)
             self.meeting_box.append(box)
@@ -975,6 +988,7 @@ class Widget(Adw.ApplicationWindow):
         self.save()
 
     def on_prep_toggled(self, cb, m, j):
+        set_struck(cb.get_last_child(), PREP[j], cb.get_active())
         self.cheer(cb)
         m["done"] += [False] * (j + 1 - len(m["done"]))
         m["done"][j] = cb.get_active()
