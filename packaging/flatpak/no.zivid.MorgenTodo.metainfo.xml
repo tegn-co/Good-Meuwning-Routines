@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>no.zivid.MorgenTodo</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>LicenseRef-proprietary</project_license>
+  <name>Morning Routine</name>
+  <summary>Morning checklist, day plan, hours and a pomodoro timer – with a pixel cat</summary>
+  <description>
+    <p>Morning Routine opens every morning with your checklist, helps you plan the day, keeps track of
+    your hours and overtime and runs a pomodoro timer. An animated pixel cat lives on top of the title.</p>
+  </description>
+  <launchable type="desktop-id">no.zivid.MorgenTodo.desktop</launchable>
+  <url type="homepage">https://github.com/tegn-co/Good-Meuwning-Routines</url>
+  <developer id="tegn-co"><name>John Thein</name></developer>
+  <content_rating type="oars-1.1"/>
+  <releases>
+    <release version="1.3.0" date="2026-10-20"/>
+  </releases>
+</component>

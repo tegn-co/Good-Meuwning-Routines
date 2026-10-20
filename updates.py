@@ -18,6 +18,8 @@ CACHE = Path(os.environ.get("XDG_CACHE_HOME", Path.home() / ".cache")) / "morgen
 
 
 def installed_version():
+    if Path("/.flatpak-info").exists():
+        return None  # Flatpak oppdateres med «flatpak update» / ny pakke, ikke herfra
     try:
         return VERSION_FILE.read_text().strip()
     except OSError:

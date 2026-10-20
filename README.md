@@ -80,7 +80,10 @@ sudo apt install ./morgen-todo_all.deb
 Or read [`install.sh`](install.sh) first – it only downloads the .deb and runs `apt install`.
 </details>
 
-Requires Ubuntu 24.04 or newer (GTK ≥ 4.12, libadwaita ≥ 1.4). apt installs everything else.
+Works on Ubuntu 24.04+ and Debian (installs the .deb; apt fetches everything else), and on any other
+Linux with [Flatpak](https://flatpak.org/setup/) (installs the Flatpak). Or grab `morgen-todo_all.deb` /
+`morgen-todo.flatpak` from the [latest release](https://github.com/tegn-co/Good-Meuwning-Routines/releases/latest)
+and run `sudo apt install ./morgen-todo_all.deb` or `flatpak install --user morgen-todo.flatpak`.
 
 ### First start
 

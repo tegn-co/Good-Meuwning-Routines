@@ -41,6 +41,8 @@ PAGES = [
 
 
 def on_gnome():
+    if db.IN_FLATPAK:
+        return False  # docken er utenfor sandkassen; Flatpak-apper festes av brukeren selv
     source = Gio.SettingsSchemaSource.get_default()
     return bool(source and source.lookup("org.gnome.shell", True))
 

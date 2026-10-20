@@ -22,6 +22,7 @@ from pathlib import Path
 CONFIG_DIR = Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config")) / "morgen-todo"
 CONFIG_FILE = CONFIG_DIR / "config.json"
 DATA_DIR = Path(os.environ.get("XDG_DATA_HOME", Path.home() / ".local" / "share")) / "morgen-todo"
+IN_FLATPAK = Path("/.flatpak-info").exists()  # kjører som Flatpak: ingen systemd-timere, appen planlegger selv
 NETWORK_FS = {"cifs", "smb3", "smbfs", "nfs", "nfs4", "fuse.sshfs", "9p"}
 STALE_LOCK_SECONDS = 60  # en lås eldre enn dette er etter et krasj (lagringer tar under ett sekund)
 

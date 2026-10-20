@@ -41,3 +41,46 @@ class ScheduleTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class FlatpakSchedulerTest(unittest.TestCase):
+    """Som Flatpak åpner appen selv listen og minner om timer (App.scheduler_tick)."""
+
+    def run_tick(self, now, fired=None):
+        import db
+        from datetime import datetime  # noqa: F401
+        db.update_config(fired=fired or {})
+        schedule.save(dict(schedule.DEFAULTS))
+        import widget
+        calls = []
+
+        class FakeApp:
+            def send_notification(self, key, note):
+                calls.append(("notify", key))
+
+            def open_window(self, hours=False, cat=None):
+                calls.append(("open", hours))
+
+        widget.App.scheduler_tick(FakeApp(), now)
+        return calls
+
+    def test_morning_fires_once_also_when_late(self):
+        from datetime import datetime
+        tue = datetime(2026, 10, 20, 9, 30)
+        self.assertEqual(self.run_tick(tue), [("notify", "morning"), ("open", False)])
+        self.assertEqual(self.run_tick(tue, fired={"morning": "2026-10-20"}), [])
+
+    def test_hours_only_within_half_an_hour(self):
+        from datetime import datetime
+        self.assertIn(("open", True), self.run_tick(datetime(2026, 10, 20, 15, 10), fired={"morning": "2026-10-20"}))
+        self.assertEqual(self.run_tick(datetime(2026, 10, 20, 17, 0), fired={"morning": "2026-10-20"}), [])
+
+    def test_weekend_quiet(self):
+        from datetime import datetime
+        self.assertEqual(self.run_tick(datetime(2026, 10, 24, 9, 0)), [])
+
+    def test_next_time(self):
+        from datetime import datetime
+        sch = dict(schedule.DEFAULTS)
+        self.assertEqual(schedule.next_time(sch, "morning", datetime(2026, 10, 23, 9, 0)), "Mon 2026-10-26 08:00:00")
+        self.assertEqual(schedule.next_time(dict(sch, hours_on=False), "hours"), "off")

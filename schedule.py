@@ -11,7 +11,7 @@ Endringer skrives inn i timerne med apply_timers().
 import json
 import os
 import subprocess
-from datetime import time as dtime
+from datetime import datetime, time as dtime, timedelta
 from pathlib import Path
 
 import db
@@ -54,8 +54,41 @@ def parse(hhmm):
     return dtime(int(h), int(m))
 
 
+def next_time(sch, key, now=None):
+    """Neste gang en påminnelse skal gå (brukes når appen planlegger selv, som Flatpak)."""
+    if not sch[f"{key}_on"] or not sch[f"{key}_days"]:
+        return "off"
+    now = now or datetime.now()
+    for add in range(8):
+        day = now.date() + timedelta(days=add)
+        at = datetime.combine(day, parse(sch[key]))
+        if day.weekday() in sch[f"{key}_days"] and at > now:
+            return at.strftime("%a %Y-%m-%d %H:%M:%S")
+    return "off"
+
+
+def request_background(autostart):
+    """Flatpak: be systemet om å starte appen usynlig ved innlogging (Background-portalen)."""
+    from gi.repository import Gio, GLib
+    opts = {
+        "reason": GLib.Variant("s", "Open your morning list and remind you to log hours"),
+        "autostart": GLib.Variant("b", autostart),
+        "commandline": GLib.Variant("as", ["morgen-todo", "--background"]),
+        "dbus-activatable": GLib.Variant("b", False),
+    }
+    bus = Gio.bus_get_sync(Gio.BusType.SESSION, None)
+    bus.call_sync("org.freedesktop.portal.Desktop", "/org/freedesktop/portal/desktop",
+                  "org.freedesktop.portal.Background", "RequestBackground",
+                  GLib.Variant("(sa{sv})", ("", opts)), None, Gio.DBusCallFlags.NONE, 5000, None)
+
+
 def apply_timers(schedule):
-    """Skriv tidene inn i systemd-timerne og slå dem av/på. Returnerer neste kjøring per timer."""
+    """Skriv tidene inn i systemd-timerne og slå dem av/på. Returnerer neste kjøring per timer.
+    Som Flatpak finnes ingen systemd-timere: appen planlegger selv (App.scheduler_tick), og ber bare
+    om å bli startet ved innlogging."""
+    if db.IN_FLATPAK:
+        request_background(any(schedule[f"{k}_on"] and schedule[f"{k}_days"] for k in TIMERS))
+        return {k: next_time(schedule, k) for k in TIMERS}
     TIMER_DIR.mkdir(parents=True, exist_ok=True)  # finnes ikke hos nye brukere
     for key, (unit, description, persistent) in TIMERS.items():
         days = ",".join(DAY_NAMES[d] for d in sorted(schedule[f"{key}_days"])) or "Mon"  # ingen dager = slått av under

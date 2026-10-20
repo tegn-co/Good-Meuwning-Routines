@@ -743,7 +743,8 @@ class Widget(Adw.ApplicationWindow):
         heading.set_margin_top(14)
         page.append(heading)
         version = updates.installed_version()
-        page.append(label(_("version {version}").format(version=version) if version else "running from source", "detail", "muted"))
+        where = _("installed as Flatpak") if db.IN_FLATPAK else _("running from source")
+        page.append(label(_("version {version}").format(version=version) if version else where, "detail", "muted"))
         self.check_updates = Gtk.CheckButton(label=_("check for new versions"), active=db.load_config().get("check_updates", True))
         self.check_updates.add_css_class("detail")
         self.check_updates.connect("toggled", lambda b: db.update_config(check_updates=b.get_active()))
@@ -1274,18 +1275,34 @@ class App(Adw.Application):
 
     def do_command_line(self, cmd):
         # Kun ett vindu: åpner man på nytt, vises det eksisterende. --hours = påminnelsen kl 15:00
+        args = cmd.get_arguments()
+        if db.IN_FLATPAK:
+            # Flatpak har ingen systemd-timere: appen blir værende i bakgrunnen og planlegger selv
+            if not getattr(self, "held", False):
+                self.hold()
+                self.held = True
+                GLib.timeout_add_seconds(30, self.scheduler_tick)
+                GLib.timeout_add_seconds(3, lambda: self.scheduler_tick() and False)
+            if "--background" in args:
+                return 0  # startet ved innlogging: bare vent på klokka
+        cat = next((a.split("=", 1)[1] for a in args if a.startswith("--cat=")), None)
+        self.open_window(cat=cat, hours="--hours" in args)
+        return 0
+
+    def open_window(self, cat=None, hours=False):
         win = getattr(self, "win", None)
         if not win:
-            display = Gdk.Display.get_default()
-            self.colors = Gtk.CssProvider()
-            Gtk.StyleContext.add_provider_for_display(display, self.colors, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
-            css = Gtk.CssProvider()
-            css.load_from_string(CSS + POMODORO_CSS)
-            Gtk.StyleContext.add_provider_for_display(display, css, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION + 1)
+            if not getattr(self, "colors", None):
+                display = Gdk.Display.get_default()
+                self.colors = Gtk.CssProvider()
+                Gtk.StyleContext.add_provider_for_display(display, self.colors, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
+                css = Gtk.CssProvider()
+                css.load_from_string(CSS + POMODORO_CSS)
+                Gtk.StyleContext.add_provider_for_display(display, css, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION + 1)
+                Adw.StyleManager.get_default().connect("notify::dark", lambda *_: self.apply_colors())
             # --cat=<navn> tvinger en bestemt katteanimasjon (for testing)
-            cat = next((a.split("=", 1)[1] for a in cmd.get_arguments() if a.startswith("--cat=")), None)
             win = self.win = Widget(self, cat)
-            Adw.StyleManager.get_default().connect("notify::dark", lambda *_: self.apply_colors())
+            win.connect("destroy", lambda *_: setattr(self, "win", None))  # i bakgrunnen kan et nytt vindu åpnes senere
             try:
                 theme = THEME_FILE.read_text().strip()
             except OSError:
@@ -1296,9 +1313,33 @@ class App(Adw.Application):
         else:
             win.check_new_day()  # f.eks. 08:00-timeren henter fram et vindu som har stått åpent siden i går
         win.present()
-        if "--hours" in cmd.get_arguments():
+        if hours:
             win.focus_hours()
-        return 0
+
+    def scheduler_tick(self, now=None):
+        """Flatpak: åpne listen og minn om timer til tidene under ⚙ → schedule (som systemd-timerne ellers gjør).
+        Morgenlisten åpnes også om maskinen var av på tidspunktet; timepåminnelsen bare innen 30 min."""
+        now = now or datetime.now()
+        sch = schedule.load()
+        fired = db.load_config().get("fired", {})
+        texts = {"morning": (_("Good morning ☀️"), _("Time for your morning routine.")),
+                 "hours": (_("⏱ Log your hours"), _("How many hours did you work today?"))}
+        for key in ("morning", "hours"):
+            if not sch[f"{key}_on"] or now.weekday() not in sch[f"{key}_days"] or fired.get(key) == str(now.date()):
+                continue
+            at = datetime.combine(now.date(), schedule.parse(sch[key]))
+            if now < at:
+                continue
+            fired[key] = str(now.date())
+            db.update_config(fired=fired)
+            if key == "hours" and now - at > timedelta(minutes=30):
+                continue
+            note = Gio.Notification.new(texts[key][0])
+            note.set_body(texts[key][1])
+            note.set_icon(Gio.ThemedIcon.new("no.zivid.MorgenTodo"))
+            self.send_notification(key, note)
+            self.open_window(hours=key == "hours")
+        return True
 
     def set_theme(self, name):
         name = name if name in [t[0] for t in THEMES] else "system"

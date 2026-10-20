@@ -1,5 +1,6 @@
-# Bygger .deb-pakken og lager en GitHub Release når en versjonstag pushes:
-#   git tag v1.0.1 && git push origin v1.0.1
+# Lager en GitHub Release når en versjonstag pushes:
+#   git tag v1.3.0 && git push origin v1.3.0
+# Testene kjøres først; så bygges .deb (Ubuntu/Debian) og .flatpak (alle distroer), og begge legges ved releasen.
 name: Release
 
 on:
@@ -37,18 +38,63 @@ jobs:
           dpkg -s morgen-todo | grep -E '^(Status|Version)'
           for f in /usr/share/morgen-todo/*.py; do python3 -c "import ast; ast.parse(open('$f').read())"; done
 
+      - uses: actions/upload-artifact@v4
+        with:
+          name: deb
+          path: packaging/dist/*.deb
+
+  flatpak:
+    needs: test
+    runs-on: ubuntu-24.04
+    container:
+      image: ghcr.io/flathub-infra/flatpak-github-actions:gnome-47
+      options: --privileged
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Build .flatpak
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          sed -i "s/<release version=\"[^\"]*\" date=\"[^\"]*\"/<release version=\"$VERSION\" date=\"$(date +%F)\"/" \
+            packaging/flatpak/no.zivid.MorgenTodo.metainfo.xml
+          flatpak-builder --disable-rofiles-fuse --force-clean --repo=repo build packaging/flatpak/no.zivid.MorgenTodo.yml
+          flatpak build-bundle repo morgen-todo.flatpak no.zivid.MorgenTodo \
+            --runtime-repo=https://flathub.org/repo/flathub.flatpakrepo
+
+      - name: Check the bundle installs
+        run: |
+          flatpak install --user -y --noninteractive morgen-todo.flatpak
+          flatpak run --user --command=python3 no.zivid.MorgenTodo -c \
+            "import sys; sys.path.insert(0, '/app/share/morgen-todo'); import db; assert db.IN_FLATPAK"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: flatpak
+          path: morgen-todo.flatpak
+
+  publish:
+    needs: [deb, flatpak]
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
       - name: Publish release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           cat > notes.md <<'NOTES'
-          Install or update with one command:
+          Install or update with one command (Ubuntu/Debian get the .deb, other Linux the Flatpak):
 
           ```sh
           curl -fsSL https://raw.githubusercontent.com/tegn-co/Good-Meuwning-Routines/main/install.sh | sh
           ```
 
-          Or download `morgen-todo_all.deb` below and run `sudo apt install ./morgen-todo_all.deb`.
+          Or download a file below:
+          - `morgen-todo_all.deb` – Ubuntu 24.04+ / Debian: `sudo apt install ./morgen-todo_all.deb`
+          - `morgen-todo.flatpak` – any Linux with Flatpak: `flatpak install --user morgen-todo.flatpak`
           NOTES
-          gh release create "$GITHUB_REF_NAME" packaging/dist/*.deb \
+          gh release create "$GITHUB_REF_NAME" dist/* -R "$GITHUB_REPOSITORY" \
             --title "Morning Routine $GITHUB_REF_NAME" --notes-file notes.md

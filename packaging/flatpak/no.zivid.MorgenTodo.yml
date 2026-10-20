@@ -1,0 +1,31 @@
+# Flatpak for Morning Routine. Bygges av GitHub Actions ved hver release (se .github/workflows/release.yml),
+# eller lokalt: flatpak-builder --user --install build packaging/flatpak/no.zivid.MorgenTodo.yml
+app-id: no.zivid.MorgenTodo
+runtime: org.gnome.Platform
+runtime-version: '47'
+sdk: org.gnome.Sdk
+command: morgen-todo
+finish-args:
+  - --share=ipc
+  - --socket=wayland
+  - --socket=fallback-x11
+  - --device=dri
+modules:
+  - name: morgen-todo
+    buildsystem: simple
+    build-commands:
+      - install -Dm644 -t /app/share/morgen-todo widget.py cat.py cat_settings.py pomodoro.py db.py schedule.py onboarding.py updates.py i18n.py
+      - python3 -m compileall -q /app/share/morgen-todo
+      - install -Dm755 packaging/flatpak/morgen-todo.sh /app/bin/morgen-todo
+      - install -Dm644 packaging/files/no.zivid.MorgenTodo.desktop /app/share/applications/no.zivid.MorgenTodo.desktop
+      - install -Dm644 packaging/flatpak/no.zivid.MorgenTodo.metainfo.xml /app/share/metainfo/no.zivid.MorgenTodo.metainfo.xml
+      - install -Dm644 -t /app/share/fonts/morgen-todo packaging/fonts/*.ttf
+      - HOME=/tmp XDG_CONFIG_HOME=/tmp XDG_DATA_HOME=/tmp python3 packaging/make_icon.py /app/share/icons/hicolor
+    sources:
+      - type: dir
+        path: ../..
+        skip:
+          - .git
+          - packaging/dist
+          - .flatpak-builder
+          - build
