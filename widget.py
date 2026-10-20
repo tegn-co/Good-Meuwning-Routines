@@ -148,7 +148,8 @@ class Widget(Adw.ApplicationWindow):
         self.side = Gtk.ScrolledWindow(vexpand=True, hexpand=True, visible=False,
                                        hscrollbar_policy=Gtk.PolicyType.EXTERNAL)
         self.side_stack.add_named(side, "plan")
-        self.side.set_child(self.side_stack)
+        # Clamp: sidene får aldri mer enn panelets bredde, så lange tekster brytes i stedet for å sprenge panelet
+        self.side.set_child(Adw.Clamp(child=self.side_stack, maximum_size=SIDE_W - 1, tightening_threshold=SIDE_W - 1))
         self.side.add_css_class("side")
         main.append(self.side)
         # Én animasjon styrer vindusbredden, så panelet glir ut/inn sammen med vinduskanten
@@ -623,6 +624,9 @@ class Widget(Adw.ApplicationWindow):
             for spin, value in ((hh, t.hour), (mm, t.minute - t.minute % 5)):
                 spin.set_value(value)
                 spin.set_wrap(True)
+                # Loddrett (+ over, − under) og to tegn bred, så fire felt får plass i sidepanelet
+                spin.set_orientation(Gtk.Orientation.VERTICAL)
+                spin.set_width_chars(2)
                 spin.connect("output", lambda sp: sp.set_text(f"{int(sp.get_value()):02d}") or True)
             picker = Gtk.Box(spacing=2, hexpand=True, halign=Gtk.Align.END)
             picker.append(hh)
@@ -640,6 +644,7 @@ class Widget(Adw.ApplicationWindow):
                                      ("close", "save & close", False)]:
             on = Gtk.CheckButton(label=text, active=sch[f"{key}_on"])
             on.add_css_class("detail")
+            on.get_last_child().set_wrap(True)  # lang tekst brytes i stedet for å gjøre panelet bredere
             picker, hh, mm = time_picker(key)
             row(on, picker)
             self.sched_widgets[key] = (on, hh, mm)
