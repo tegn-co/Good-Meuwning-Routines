@@ -9,16 +9,19 @@ import shutil
 import urllib.request
 from pathlib import Path
 
+import platforms
+
 REPO = "tegn-co/Good-Meuwning-Routines"
 LATEST_API = f"https://api.github.com/repos/{REPO}/releases/latest"
 DEB_URL = f"https://github.com/{REPO}/releases/latest/download/morgen-todo_all.deb"
+SETUP_URL = f"https://github.com/{REPO}/releases/latest/download/MorningRoutine-Setup.exe"
 INSTALL_COMMAND = f"curl -fsSL https://raw.githubusercontent.com/{REPO}/main/install.sh | sh"
-VERSION_FILE = Path(__file__).with_name("VERSION")
-CACHE = Path(os.environ.get("XDG_CACHE_HOME", Path.home() / ".cache")) / "morgen-todo"
+VERSION_FILE = platforms.app_dir() / "VERSION"
+CACHE = platforms.cache_dir()
 
 
 def installed_version():
-    if Path("/.flatpak-info").exists():
+    if platforms.IN_FLATPAK:
         return None  # Flatpak updates via "flatpak update" / a new bundle, not from here
     try:
         return VERSION_FILE.read_text().strip()
@@ -48,18 +51,23 @@ def check_for_newer_version():
 
 
 def download_latest_package():
-    """Download the latest .deb to the cache dir (background thread). Returns the path."""
+    """Download the latest .deb (Linux) or installer (Windows) to the cache dir. Returns the path."""
     CACHE.mkdir(parents=True, exist_ok=True)
-    path = CACHE / "morgen-todo_all.deb"
-    req = urllib.request.Request(DEB_URL, headers={"User-Agent": "morgen-todo"})
+    url, name = (SETUP_URL, "MorningRoutine-Setup.exe") if platforms.IS_WINDOWS else (DEB_URL, "morgen-todo_all.deb")
+    path = CACHE / name
+    req = urllib.request.Request(url, headers={"User-Agent": "morgen-todo"})
     with urllib.request.urlopen(req, timeout=60) as r, open(path, "wb") as f:
         shutil.copyfileobj(r, f)
-    path.chmod(0o644)  # apt reads the file as its own user
-    CACHE.chmod(0o755)
+    if not platforms.IS_WINDOWS:
+        path.chmod(0o644)  # apt reads the file as its own user
+        CACHE.chmod(0o755)
     return path
 
 
 def install_command(path):
-    """Command that installs the package with a graphical password prompt (pkexec), or None."""
+    """Command that installs the update: the installer itself on Windows, apt via a graphical
+    password prompt (pkexec) on Linux, or None."""
+    if platforms.IS_WINDOWS:
+        return [str(path), "/SILENT", "/SUPPRESSMSGBOXES", "/NORESTART"]
     pkexec = shutil.which("pkexec")
     return [pkexec, "apt-get", "install", "-y", str(path)] if pkexec else None

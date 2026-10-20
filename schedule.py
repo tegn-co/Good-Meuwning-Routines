@@ -15,6 +15,7 @@ from datetime import datetime, time as dtime, timedelta
 from pathlib import Path
 
 import database as db
+import platforms
 
 DEFAULTS = {
     "morning": "08:00", "morning_on": True,
@@ -67,27 +68,12 @@ def next_reminder_time(sch, key, now=None):
     return "off"
 
 
-def request_autostart(autostart):
-    """Flatpak: ask to start the app hidden at login (Background portal)."""
-    from gi.repository import Gio, GLib
-    opts = {
-        "reason": GLib.Variant("s", "Open your morning list and remind you to log hours"),
-        "autostart": GLib.Variant("b", autostart),
-        "commandline": GLib.Variant("as", ["morgen-todo", "--background"]),
-        "dbus-activatable": GLib.Variant("b", False),
-    }
-    bus = Gio.bus_get_sync(Gio.BusType.SESSION, None)
-    bus.call_sync("org.freedesktop.portal.Desktop", "/org/freedesktop/portal/desktop",
-                  "org.freedesktop.portal.Background", "RequestBackground",
-                  GLib.Variant("(sa{sv})", ("", opts)), None, Gio.DBusCallFlags.NONE, 5000, None)
-
-
 def apply_reminders(schedule):
     """Write the times into the systemd timers and enable/disable them. Returns the next run per timer.
     Flatpak has no systemd timers: the app schedules itself (App.fire_due_reminders) and only
     asks to be started at login."""
-    if db.IN_FLATPAK:
-        request_autostart(any(schedule[f"{k}_on"] and schedule[f"{k}_days"] for k in TIMERS))
+    if platforms.USES_APP_SCHEDULER:
+        platforms.set_autostart(any(schedule[f"{k}_on"] and schedule[f"{k}_days"] for k in TIMERS))
         return {k: next_reminder_time(schedule, k) for k in TIMERS}
     TIMER_DIR.mkdir(parents=True, exist_ok=True)  # missing for new users
     for key, (unit, description, persistent) in TIMERS.items():

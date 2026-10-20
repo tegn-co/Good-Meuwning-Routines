@@ -1,0 +1,69 @@
+# Builds MorningRoutine-Setup.exe on Windows, installs it silently and checks that the app starts.
+# Used by release.yml; can also be started by hand (Actions -> Windows build -> Run workflow).
+name: Windows build
+
+on:
+  workflow_call:
+    inputs:
+      version:
+        type: string
+        required: true
+  push:
+    branches: [main]
+    paths: ["packaging/windows/**", "platforms.py", ".github/workflows/windows.yml"]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Version number to build
+        default: 0.0.0
+
+env:
+  VERSION: ${{ inputs.version || '0.0.0' }}
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: msys2/setup-msys2@v2
+        with:
+          msystem: UCRT64
+          update: true
+          install: >-
+            mingw-w64-ucrt-x86_64-gtk4
+            mingw-w64-ucrt-x86_64-libadwaita
+            mingw-w64-ucrt-x86_64-python
+            mingw-w64-ucrt-x86_64-python-gobject
+            mingw-w64-ucrt-x86_64-python-cairo
+            mingw-w64-ucrt-x86_64-pyinstaller
+            mingw-w64-ucrt-x86_64-pyinstaller-hooks-contrib
+
+      - name: Build the app with PyInstaller
+        shell: msys2 {0}
+        run: packaging/windows/build.sh "${VERSION#v}"
+
+      - name: Build the installer with Inno Setup
+        shell: pwsh
+        run: |
+          choco install innosetup -y --no-progress
+          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" "/DAppVersion=$($env:VERSION.TrimStart('v'))" packaging\windows\installer.iss
+
+      - name: Check the installer installs and the app starts
+        shell: pwsh
+        run: |
+          Start-Process packaging\windows\dist\MorningRoutine-Setup.exe -ArgumentList "/VERYSILENT","/SUPPRESSMSGBOXES","/NORESTART" -Wait
+          Get-Process MorningRoutine -ErrorAction SilentlyContinue | Stop-Process -Force
+          $exe = "$env:LOCALAPPDATA\Programs\Morning Routine\MorningRoutine.exe"
+          if (-not (Test-Path $exe)) { throw "not installed: $exe" }
+          $env:MORGEN_TODO_SMOKE_TEST = "$env:RUNNER_TEMP\smoke.txt"
+          Start-Process $exe
+          for ($i = 0; $i -lt 60 -and -not (Test-Path $env:MORGEN_TODO_SMOKE_TEST); $i++) { Start-Sleep 1 }
+          if (-not (Test-Path $env:MORGEN_TODO_SMOKE_TEST)) { throw "the installed app did not start" }
+          Get-Content $env:MORGEN_TODO_SMOKE_TEST
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows
+          path: packaging/windows/dist/MorningRoutine-Setup.exe
+

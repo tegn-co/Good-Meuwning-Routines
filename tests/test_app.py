@@ -10,6 +10,7 @@ gi.require_version("Gtk", "4.0")
 from gi.repository import GLib  # noqa: E402
 
 import cat  # noqa: E402
+import platforms  # noqa: E402
 import database as db  # noqa: E402
 import tutorial  # noqa: E402
 import app as W  # noqa: E402
@@ -48,7 +49,10 @@ class AppTest(unittest.TestCase):
         def after_onboarding(w):
             cfg = db.load_config()
             check(cfg.get("onboarded") and cfg.get("expected_hours") == 7.5, f"setup not saved: {cfg}")
-            check((env.TMP / "systemd" / "morgen-todo.timer").exists(), "timers not written")
+            if platforms.USES_APP_SCHEDULER:
+                check(env.AUTOSTART_CALLS[-1:] == [True], "start at login not requested")
+            else:
+                check((env.TMP / "systemd" / "morgen-todo.timer").exists(), "timers not written")
             check(w.bal_total.get_label() == "+3.00 h", f"opening balance: {w.bal_total.get_label()}")
 
         @step
@@ -177,6 +181,9 @@ class AppTest(unittest.TestCase):
         def playtime_start(w):
             r = next(c for c in [w.overlay.get_last_child()] if isinstance(c, cat.CatOverlay))
             t = w.title_cat
+            if not hasattr(t, "cat_box"):  # the window may not have been painted yet (unfocused test window)
+                import cairo
+                t.draw_cat(cairo.Context(cairo.ImageSurface(cairo.FORMAT_ARGB32, 400, 120)), 400)
             bx, by, bw, bh = t.cat_box
             for _ in range(4):
                 t.on_click(None, 1, bx + bw / 2, by + bh / 2)

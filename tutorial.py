@@ -9,6 +9,7 @@ gi.require_version("Adw", "1")
 from gi.repository import Adw, Gio, GLib, Gtk  # noqa: E402
 
 import database as db
+import platforms
 import schedule
 from cat import TitleCat
 from translations import _
@@ -41,8 +42,8 @@ PAGES = [
 
 
 def is_gnome_desktop():
-    if db.IN_FLATPAK:
-        return False  # the dock is outside the sandbox; Flatpak users pin the app themselves
+    if platforms.IN_FLATPAK or platforms.IS_WINDOWS:
+        return False  # Flatpak: the dock is outside the sandbox; Windows: users pin the app themselves
     source = Gio.SettingsSchemaSource.get_default()
     return bool(source and source.lookup("org.gnome.shell", True))
 

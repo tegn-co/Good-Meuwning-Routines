@@ -1,9 +1,11 @@
 import unittest
 
 from tests import env
+import platforms
 import schedule
 
 
+@unittest.skipIf(platforms.IS_WINDOWS, "systemd timers are Linux only")
 class ScheduleTest(unittest.TestCase):
     def test_full_timer_without_package(self):
         sch = dict(schedule.DEFAULTS, morning="08:07", hours_days=[0, 2])

@@ -95,6 +95,7 @@ NB = {
     "Not now": "Ikke nå",
     "Version {latest} is available (you have {current}).": "Versjon {latest} er ute (du har {current}).",
     "Downloading…": "Laster ned…",
+    "Installing…": "Installerer…",
     "Download failed – {err}": "Nedlastingen feilet – {err}",
     "Run this in a terminal to update:\n{cmd}": "Kjør dette i en terminal for å oppdatere:\n{cmd}",
     "Installing – enter your password in the dialog…": "Installerer – skriv passordet ditt i vinduet…",

@@ -3,3 +3,8 @@ __pycache__/
 packaging/dist/
 *.db
 *.db.lock
+packaging/windows/dist/
+packaging/windows/build/
+packaging/windows/icons/
+packaging/windows/VERSION
+packaging/windows/morning-routine.ico

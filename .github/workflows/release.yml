@@ -72,8 +72,14 @@ jobs:
           name: flatpak
           path: morgen-todo.flatpak
 
+  windows:
+    needs: test
+    uses: ./.github/workflows/windows.yml
+    with:
+      version: ${{ github.ref_name }}
+
   publish:
-    needs: [deb, flatpak]
+    needs: [deb, flatpak, windows]
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/download-artifact@v4
@@ -95,6 +101,7 @@ jobs:
           Or download a file below:
           - `morgen-todo_all.deb` – Ubuntu 24.04+ / Debian: `sudo apt install ./morgen-todo_all.deb`
           - `morgen-todo.flatpak` – any Linux with Flatpak: `flatpak install --user morgen-todo.flatpak`
+          - `MorningRoutine-Setup.exe` – Windows 10/11: download and run it (no admin needed)
           NOTES
           gh release create "$GITHUB_REF_NAME" dist/* -R "$GITHUB_REPOSITORY" \
             --title "Morning Routine $GITHUB_REF_NAME" --notes-file notes.md

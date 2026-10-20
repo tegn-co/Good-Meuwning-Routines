@@ -34,7 +34,25 @@ def render(size, out):
     surf.write_to_png(str(out))
 
 
+def write_ico(pngs, out):
+    """Windows .ico with PNG images inside (supported since Windows Vista)."""
+    import struct
+    images = [(size, Path(png).read_bytes()) for size, png in pngs]
+    header = struct.pack("<HHH", 0, 1, len(images))
+    offset = len(header) + 16 * len(images)
+    entries, data = b"", b""
+    for size, png in images:
+        side = 0 if size >= 256 else size  # 0 means 256 in the .ico format
+        entries += struct.pack("<BBBBHHII", side, side, 0, 0, 1, 32, len(png), offset + len(data))
+        data += png
+    Path(out).write_bytes(header + entries + data)
+
+
 if __name__ == "__main__":
+    # make_icon.py <icon dir> [--ico <file.ico>]
     root = Path(sys.argv[1])
     for n in SIZES:
         render(n, root / f"{n}x{n}" / "apps" / f"{ICON}.png")
+    if "--ico" in sys.argv:
+        ico_sizes = [n for n in SIZES if n <= 256]
+        write_ico([(n, root / f"{n}x{n}" / "apps" / f"{ICON}.png") for n in ico_sizes], sys.argv[sys.argv.index("--ico") + 1])

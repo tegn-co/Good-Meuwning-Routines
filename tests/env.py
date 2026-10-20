@@ -17,7 +17,11 @@ for ttf in (ROOT / "packaging" / "fonts").glob("*.ttf"):
     (TMP / "data" / "fonts" / ttf.name).write_bytes(ttf.read_bytes())
 sys.path.insert(0, str(ROOT))
 
+import platforms  # noqa: E402
 import schedule  # noqa: E402
+
+AUTOSTART_CALLS = []
+platforms.set_autostart = AUTOSTART_CALLS.append  # never touch the real login items / registry
 
 SYSTEMCTL_CALLS = []
 schedule.TIMER_DIR = TMP / "systemd"

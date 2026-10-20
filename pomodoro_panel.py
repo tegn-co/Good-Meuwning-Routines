@@ -6,7 +6,6 @@ While the timer runs the title cat sleeps during focus, plays in breaks and eats
 when stopped it behaves as usual.
 """
 import json
-import subprocess
 from datetime import date, datetime, timedelta
 
 import gi
@@ -15,6 +14,7 @@ gi.require_version("Gtk", "4.0")
 from gi.repository import GLib, Gtk  # noqa: E402
 
 import database as db  # noqa: E402
+import platforms  # noqa: E402
 from translations import _  # noqa: E402
 
 # Defaults; user values live in SETTINGS_FILE. "rounds" = focus sessions before a long break
@@ -37,11 +37,6 @@ button.pixel { font-family: "Silkscreen"; font-size: 11px; border-radius: 0; box
 button.pixel:hover { border-color: @mt_accent; color: @mt_accent; }
 button.pixel.go { background: @mt_accent; border-color: @mt_accent; color: @mt_bg; }
 """
-
-
-def notify(title, body):
-    subprocess.Popen(["notify-send", "-i", "appointment-soon", title, body],
-                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
 
 def label(text, *classes):
@@ -190,11 +185,11 @@ class PomodoroPanel(Gtk.Box):
             self.done_in_cycle += 1
             self.save_stats()
             nxt = "long" if self.done_in_cycle % self.settings["rounds"] == 0 else "short"
-            notify(_("🍅 Focus done"), _("Time for a {n} min break.").format(n=self.settings[nxt]))
+            platforms.notify(_("🍅 Focus done"), _("Time for a {n} min break.").format(n=self.settings[nxt]))
             self.set_phase(nxt, autostart=True)  # breaks start automatically
             self.cat.react_to("break", 3)
         else:
-            notify(_("🍅 Break over"), _("Ready for the next focus session?"))
+            platforms.notify(_("🍅 Break over"), _("Ready for the next focus session?"))
             self.set_phase("focus", autostart=False)  # focus waits for the start button
             self.cat.react_to("focus", 3)
 

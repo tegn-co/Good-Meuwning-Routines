@@ -19,3 +19,25 @@ jobs:
 
       - name: Unit and app tests
         run: xvfb-run -a -s "-screen 0 1280x1024x24" dbus-run-session -- python3 -m unittest discover -s tests -t . -v
+
+  windows:
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: msys2 {0}
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: msys2/setup-msys2@v2
+        with:
+          msystem: UCRT64
+          update: true
+          install: >-
+            mingw-w64-ucrt-x86_64-gtk4
+            mingw-w64-ucrt-x86_64-libadwaita
+            mingw-w64-ucrt-x86_64-python
+            mingw-w64-ucrt-x86_64-python-gobject
+            mingw-w64-ucrt-x86_64-python-cairo
+
+      - name: Unit and app tests on Windows
+        run: python -m unittest discover -s tests -t . -v

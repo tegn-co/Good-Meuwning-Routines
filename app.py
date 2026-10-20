@@ -3,6 +3,7 @@
 import json
 import os
 import random
+import subprocess
 import sys
 import threading
 import uuid
@@ -24,6 +25,7 @@ import database as db  # noqa: E402
 import schedule  # noqa: E402
 from tutorial import Tutorial  # noqa: E402
 import updater  # noqa: E402
+import platforms  # noqa: E402
 import weather  # noqa: E402
 from translations import LANG, LANGUAGES, _  # noqa: E402
 
@@ -752,7 +754,7 @@ class MainWindow(Adw.ApplicationWindow):
         heading.set_margin_top(14)
         page.append(heading)
         version = updater.installed_version()
-        where = _("installed as Flatpak") if db.IN_FLATPAK else _("running from source")
+        where = _("installed as Flatpak") if platforms.IN_FLATPAK else _("running from source")
         page.append(label(_("version {version}").format(version=version) if version else where, "detail", "muted"))
         self.check_updates = Gtk.CheckButton(label=_("check for new versions"), active=db.load_config().get("check_updates", True))
         self.check_updates.add_css_class("detail")
@@ -828,7 +830,7 @@ class MainWindow(Adw.ApplicationWindow):
         """Restart the app (after a restore or update)."""
         if self.loaded:
             self.on_close(None)
-        os.execv(sys.executable, [sys.executable, str(Path(__file__).resolve())])
+        platforms.restart()
 
     # --- weather ---
     def refresh_weather(self):
@@ -991,6 +993,14 @@ class MainWindow(Adw.ApplicationWindow):
             cmd = updater.install_command(path)
             if not cmd:
                 self.update_lbl.set_label(_("Run this in a terminal to update:\n{cmd}").format(cmd=updater.INSTALL_COMMAND))
+                return
+            if platforms.IS_WINDOWS:
+                # The installer replaces the app's files, so close first; it starts the app again when done
+                self.update_lbl.set_label(_("Installing…"))
+                subprocess.Popen(cmd, close_fds=True)
+                if self.loaded:
+                    self.on_close(None)
+                self.get_application().quit()
                 return
             self.update_lbl.set_label(_("Installing – enter your password in the dialog…"))
             proc = Gio.Subprocess.new(cmd, Gio.SubprocessFlags.NONE)
@@ -1398,8 +1408,8 @@ class App(Adw.Application):
     def do_command_line(self, cmd):
         # Single window: launching again presents the existing one. --hours = the 15:00 reminder
         args = cmd.get_arguments()
-        if db.IN_FLATPAK:
-            # Flatpak has no systemd timers: the app stays in the background and fires reminders itself
+        if platforms.USES_APP_SCHEDULER:
+            # Flatpak and Windows have no systemd timers: the app stays in the background and fires reminders itself
             if not getattr(self, "held", False):
                 self.hold()
                 self.held = True
@@ -1432,6 +1442,10 @@ class App(Adw.Application):
             self.set_theme(theme)
             if not db.load_config().get("onboarded"):
                 GLib.timeout_add(600, lambda: win.show_tutorial() and False)  # first run: welcome tutorial
+            if smoke := os.environ.get("MORGEN_TODO_SMOKE_TEST"):
+                # Used by the Windows build check: prove the installed app starts, then quit
+                GLib.timeout_add(4000, lambda: (Path(smoke).write_text(f"ok {updater.installed_version()}"),
+                                                self.quit(), False)[-1])
         else:
             win.check_new_day()  # e.g. the 08:00 timer raises a window left open since yesterday
         win.present()
@@ -1491,4 +1505,5 @@ class App(Adw.Application):
 
 
 if __name__ == "__main__":
+    platforms.register_fonts()
     sys.exit(App().run(sys.argv))

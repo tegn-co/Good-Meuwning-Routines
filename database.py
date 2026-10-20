@@ -19,10 +19,12 @@ import time
 from datetime import date, datetime, timedelta
 from pathlib import Path
 
-CONFIG_DIR = Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config")) / "morgen-todo"
+import platforms
+
+CONFIG_DIR = platforms.config_dir()
 CONFIG_FILE = CONFIG_DIR / "config.json"
-DATA_DIR = Path(os.environ.get("XDG_DATA_HOME", Path.home() / ".local" / "share")) / "morgen-todo"
-IN_FLATPAK = Path("/.flatpak-info").exists()  # Flatpak has no systemd timers, so the app schedules itself
+DATA_DIR = platforms.data_dir()
+IN_FLATPAK = platforms.IN_FLATPAK
 NETWORK_FS = {"cifs", "smb3", "smbfs", "nfs", "nfs4", "fuse.sshfs", "9p"}
 STALE_LOCK_SECONDS = 60  # older locks are left from a crash (saves take under a second)
 
