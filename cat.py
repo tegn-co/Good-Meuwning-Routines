@@ -555,6 +555,7 @@ class TitleCat(Gtk.DrawingArea):
     def say(self, text, seconds=2.0):
         if text:
             self.speech, self.speech_until = text, self.t + seconds
+            self.speech_start = self.t
         self.happy_until = self.t + 1.6
 
     def react(self, event, seconds=2.0):
@@ -726,7 +727,8 @@ class TitleCat(Gtk.DrawingArea):
         w, h = log.width + 10, log.height + 6
         x = round(max(1, min(width - w - 1, cx - w / 2)))
         y = round(max(1, bottom - h - 4))
-        pop = min(1.0, (2.0 - (self.speech_until - self.t)) / 0.12)  # liten "pop" når den dukker opp
+        # Liten "pop" når boblen dukker opp (regnet fra når den startet, så lange bobler også virker)
+        pop = max(0.05, min(1.0, (self.t - getattr(self, "speech_start", self.t - 1)) / 0.12))
         cr.save()
         cr.translate(x + w / 2, y + h)
         cr.scale(pop, pop)

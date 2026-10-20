@@ -1,0 +1,21 @@
+# Felles testjobb: brukes av ci.yml (push/PR) og release.yml (før en release bygges)
+name: Run tests
+
+on:
+  workflow_call:
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install GTK and a virtual display
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq python3-gi python3-gi-cairo python3-cairo gir1.2-gtk-4.0 gir1.2-adw-1 \
+            xvfb dbus-x11 libnotify-bin
+          mkdir -p ~/.local/share/fonts && cp packaging/fonts/*.ttf ~/.local/share/fonts/ && fc-cache -f
+
+      - name: Unit and app tests
+        run: xvfb-run -a dbus-run-session -- python3 -m unittest discover -s tests -t . -v

@@ -1,0 +1,11 @@
+# Kjører testene ved hver push og pull request
+name: Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    uses: ./.github/workflows/tests.yml

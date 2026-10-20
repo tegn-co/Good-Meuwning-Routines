@@ -950,6 +950,10 @@ class Widget(Adw.ApplicationWindow):
             self.scroll.set_hexpand(not opening)
             return
         self.side_anim.play()
+        # Animasjonen drives av skjermoppdateringene; ligger vinduet bak et annet, kan den stå stille.
+        # Er den ikke ferdig etter 0,4 s, hopp rett til slutten så panelet aldri blir stående halvveis.
+        anim = self.side_anim
+        GLib.timeout_add(400, lambda: anim.get_state() == Adw.AnimationState.PLAYING and anim.skip() and False)
 
     def on_side_anim_done(self, _):
         if not any(b.get_active() for b in self.side_buttons().values()):

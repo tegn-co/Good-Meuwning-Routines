@@ -106,7 +106,13 @@ Network drives (CIFS/NFS/SSHFS) are detected and handled automatically.
 
 <img src="docs/cat-eat.png" align="right" width="130" alt="">
 
-Release a new version – GitHub Actions builds the .deb and publishes the release:
+Run the tests (they use temporary folders and never touch your real data):
+
+```sh
+python3 -m unittest discover -s tests -t . -v
+```
+
+Release a new version – GitHub Actions runs the tests, builds the .deb and publishes the release:
 
 ```sh
 git tag v1.0.1 && git push origin v1.0.1
