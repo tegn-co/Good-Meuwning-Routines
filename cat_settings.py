@@ -64,6 +64,20 @@ class CatSettings(Gtk.Box):
             self.color_btns[key] = btn
         self.append(grid)
 
+        # --- Tilbehør (låses opp av streaks) ---
+        wear_title = label("accessories", "num")
+        wear_title.set_margin_top(10)
+        self.append(wear_title)
+        self.append(label("Unlocked by finishing the whole list several working days in a row.", "detail", "muted"))
+        self.wear_checks = {}
+        for key, days, name in cat.UNLOCKS:
+            cb = Gtk.CheckButton(label=name)
+            cb.add_css_class("detail")
+            cb.connect("toggled", self.on_wear, key)
+            self.append(cb)
+            self.wear_checks[key] = (cb, days, name)
+        self.refresh_wear()
+
         # --- Replikker ---
         phrases_title = label("what the cat says", "num")
         phrases_title.set_margin_top(10)
@@ -89,6 +103,22 @@ class CatSettings(Gtk.Box):
         for key, entry in self.phrase_entries.items():
             entry.set_text(cat.PHRASES[key])
         self.updating = False
+
+    def refresh_wear(self):
+        """Vis hva som er låst opp (kalles også av vinduet når streaken endrer seg)."""
+        self.updating = True
+        for key, (cb, days, name) in self.wear_checks.items():
+            unlocked = key in cat.UNLOCKED
+            cb.set_sensitive(unlocked)
+            cb.set_label(name if unlocked else f"{name} – {days} days in a row")
+            cb.set_active(unlocked and cat.SETTINGS.get("wear", {}).get(key, True))
+        self.updating = False
+
+    def on_wear(self, cb, key):
+        if self.updating:
+            return
+        cat.SETTINGS.setdefault("wear", {})[key] = cb.get_active()
+        self.changed()
 
     def changed(self):
         cat.save_cat_settings()

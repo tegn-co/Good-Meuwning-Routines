@@ -109,6 +109,9 @@ def connect():
     if "day_off" not in cols:
         # Fridag (ferie, syk, helligdag): ingen forventet arbeidstid den dagen
         add_column(conn, "ALTER TABLE days ADD COLUMN day_off INTEGER NOT NULL DEFAULT 0")
+    if "complete" not in cols:
+        # Hele listen ferdig den dagen (brukes til streaks)
+        add_column(conn, "ALTER TABLE days ADD COLUMN complete INTEGER NOT NULL DEFAULT 0")
     if "expected" not in cols:
         # Forventet tid lagres per dag, så en ny arbeidsdag-lengde ikke endrer gammel overtid.
         # Eksisterende dager får dagens regel.
@@ -189,12 +192,12 @@ def load_day(day):
 def save_day(day, state):
     with session() as conn:
         conn.execute(
-            """INSERT INTO days (date, checks, plan, meetings, updated_at, hours, day_off, expected)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """INSERT INTO days (date, checks, plan, meetings, updated_at, hours, day_off, expected, complete)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                ON CONFLICT(date) DO UPDATE SET
                  checks = excluded.checks, plan = excluded.plan, meetings = excluded.meetings,
                  updated_at = excluded.updated_at, hours = excluded.hours, day_off = excluded.day_off,
-                 expected = excluded.expected""",
+                 expected = excluded.expected, complete = excluded.complete""",
             (
                 day.isoformat(),
                 json.dumps(state["checks"]),
@@ -204,6 +207,7 @@ def save_day(day, state):
                 state["hours"],
                 int(bool(state.get("day_off"))),
                 expected_for(day, state.get("day_off")),
+                int(bool(state.get("complete"))),
             ),
         )
         conn.execute("DELETE FROM hidden_items")
@@ -239,6 +243,31 @@ def set_opening_balance(hours):
     with session() as conn:
         conn.execute("INSERT INTO settings (key, value) VALUES ('opening_balance', ?) "
                      "ON CONFLICT(key) DO UPDATE SET value = excluded.value", (hours,))
+
+
+def streak_info(day, today_complete):
+    """Hvor mange arbeidsdager på rad hele listen er gjort (helg og fridager hoppes over, bryter ikke).
+    I dag teller bare når den er ferdig; ellers lever rekka fortsatt fra i går. Beste streak lagres."""
+    since = (day - timedelta(days=400)).isoformat()
+    with session() as conn:
+        rows = {r[0]: (r[1], r[2]) for r in conn.execute(
+            "SELECT date, complete, day_off FROM days WHERE date >= ? AND date < ?", (since, day.isoformat()))}
+        streak = 1 if today_complete else 0
+        d = day - timedelta(days=1)
+        for _ in range(400):
+            complete, day_off = rows.get(d.isoformat(), (0, 0))
+            if d.weekday() >= 5 or day_off:
+                pass  # helg/fridag: hopp over
+            elif complete:
+                streak += 1
+            else:
+                break
+            d -= timedelta(days=1)
+        row = conn.execute("SELECT value FROM settings WHERE key = 'best_streak'").fetchone()
+        best = max(int(row[0]) if row else 0, streak)
+        conn.execute("INSERT INTO settings (key, value) VALUES ('best_streak', ?) "
+                     "ON CONFLICT(key) DO UPDATE SET value = excluded.value", (best,))
+    return {"streak": streak, "best": best}
 
 
 def summary(day):

@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Lite, flyttbart morgen-todo-vindu (GTK4). Lagrer i SQLite via db.py (se der for hvor databasen ligger)."""
 import json
+import random
 import sys
 import uuid
 from datetime import date, datetime, timedelta
@@ -178,12 +179,16 @@ class Widget(Adw.ApplicationWindow):
         CatRoamer(self.title_cat, self.overlay)  # legger seg selv i overlay-et
         self.pomodoro = PomodoroPanel(self.title_cat, palette, on_change=self.on_pomodoro_change)
         self.side_stack.add_named(self.pomodoro, "pomo")
-        self.side_stack.add_named(CatSettings(self.title_cat), "cat")
+        self.cat_settings = CatSettings(self.title_cat)
+        self.side_stack.add_named(self.cat_settings, "cat")
         self.side_stack.add_named(self.build_settings(), "settings")
 
         meta = Gtk.Box(margin_bottom=16)
         self.date_lbl = label("", "muted", "detail")
         meta.append(self.date_lbl)
+        self.streak_lbl = label("", "detail", "muted")  # «3 days in a row»
+        self.streak_lbl.set_margin_start(10)
+        meta.append(self.streak_lbl)
         self.blocks = Gtk.Label(use_markup=True, hexpand=True, xalign=1)
         self.blocks.add_css_class("blocks")
         meta.append(self.blocks)
@@ -309,8 +314,44 @@ class Widget(Adw.ApplicationWindow):
             if datetime.now() >= self.close_at:
                 self.close_at += timedelta(days=1)
 
+    # --- streaks og humør ---
+    def refresh_streak(self):
+        self.db.submit(db.streak_info, self.day, bool(self.state.get("complete")), callback=self.show_streak)
+
+    def show_streak(self, info, err):
+        if err or not info:
+            return
+        n = info["streak"]
+        self.streak_lbl.set_label(f"· {n} day{'s' if n != 1 else ''} in a row" if n >= 2 else "")
+        (self.streak_lbl.add_css_class if self.state.get("complete") else self.streak_lbl.remove_css_class)("plus")
+        unlocked = {k for k, days, _ in catmod.UNLOCKS if info["best"] >= days}
+        new = unlocked - catmod.UNLOCKED
+        first = not hasattr(self, "streak_seen")  # ved oppstart: ingen feiring for det man allerede har
+        catmod.UNLOCKED.clear()
+        catmod.UNLOCKED.update(unlocked)
+        self.cat_settings.refresh_wear()
+        if not first and new:
+            name = next(label for k, _, label in catmod.UNLOCKS if k in new)
+            self.title_cat.say(f"unlocked: {name}!", 3)
+        elif not first and self.state.get("complete") and n >= 2 and n != getattr(self, "streak_seen", 0):
+            self.title_cat.say(f"{n} days in a row!", 3)
+        self.streak_seen = n
+
+    def mood(self):
+        """Katten reagerer på hvordan dagen går (sjekkes hvert 30. sekund)."""
+        if not self.loaded or self.pomodoro.running() or random.random() > 0.12:
+            return
+        now = datetime.now()
+        keys = self.order()
+        done = sum(bool(self.state["checks"].get(k)) for k in keys)
+        if done == 0 and now.hour >= 10:
+            self.title_cat.say(random.choice(["meow?", "*stares at list*", "mrrp?"]), 2)
+        elif keys and done == len(keys):
+            self.title_cat.say("", 0)  # bare et hjerte: fornøyd katt
+
     def check_clock(self):
         self.check_new_day()
+        self.mood()
         if self.close_at is None or datetime.now() < self.close_at:
             return True
         # Lagre først; lukk bare hvis lagringen gikk bra, ellers prøv igjen om 30 sekunder
@@ -400,6 +441,7 @@ class Widget(Adw.ApplicationWindow):
         self.set_status(True, "● saved")
         self.update_progress()
         self.update_hours()
+        self.refresh_streak()
 
     def save(self):
         if self.loading or not self.loaded:
@@ -427,6 +469,7 @@ class Widget(Adw.ApplicationWindow):
             if day == self.day:
                 self.set_status(True, "● saved")
                 self.update_hours()
+                self.refresh_streak()
             if then:
                 then()
 
@@ -444,6 +487,7 @@ class Widget(Adw.ApplicationWindow):
         if done == total and not getattr(self, "all_done", True) and not self.loading:
             self.title_cat.react("all_done", 3)
         self.all_done = done == total
+        self.state["complete"] = total > 0 and done == total  # lagres per dag, brukes til streaks
         for key, (item, check, extra) in self.items.items():
             on = check.get_active()
             (item.add_css_class if on else item.remove_css_class)("done")

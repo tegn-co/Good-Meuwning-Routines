@@ -41,7 +41,13 @@ eats lunch, chases the cursor and cheers when you check things off.
   </tr>
 </table>
 
+It also chases butterflies, washes, stretches, yawns in the morning and gets sleepy after 16:00.
 The animation changes every 15 minutes. Check something off and it says **good job!**
+
+Finish your whole list several working days in a row and the cat unlocks things to wear –
+a bow tie, a coffee cup and a beanie. In December it wears a Santa hat, and in Halloween week… boo.
+
+<sub>Psst: try clicking the cat itself a few times in a row.</sub>
 
 <p align="center"><img src="docs/breeds.png" alt="orange tabby, grey tabby, black, tuxedo, calico, white, siamese, maine coon" width="720"><br>
 <sub>orange tabby · grey tabby · black · tuxedo · calico · white · siamese · maine coon</sub></p>

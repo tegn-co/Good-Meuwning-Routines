@@ -11,6 +11,10 @@ os.environ["XDG_CONFIG_HOME"] = str(TMP / "config")
 os.environ["XDG_DATA_HOME"] = str(TMP / "data")
 os.environ.pop("MORGEN_TODO_DB", None)
 os.environ.setdefault("GTK_A11Y", "none")
+# Pikselfontene, så tittel og mål blir som i appen (fontconfig leter i $XDG_DATA_HOME/fonts)
+(TMP / "data" / "fonts").mkdir(parents=True)
+for ttf in (ROOT / "packaging" / "fonts").glob("*.ttf"):
+    (TMP / "data" / "fonts" / ttf.name).write_bytes(ttf.read_bytes())
 sys.path.insert(0, str(ROOT))
 
 import schedule  # noqa: E402

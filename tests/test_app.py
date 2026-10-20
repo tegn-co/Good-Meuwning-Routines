@@ -122,6 +122,33 @@ class AppTest(unittest.TestCase):
             check(min(xs) >= 0 and max(xs) <= r.area_w() and min(ys) >= -1 and max(ys) <= r.area_h(),
                   f"cat left the window: x {min(xs):.0f}..{max(xs):.0f} y {min(ys):.0f}..{max(ys):.0f}")
             check(w.overlay.get_height() == r.area_h(), "overlay grew")
+            # Påskeegget: 5 klikk på katten -> playtime
+            w.title_cat.forced = "sit"
+
+        @step
+        def playtime_start(w):
+            r = next(c for c in [w.overlay.get_last_child()] if isinstance(c, cat.CatRoamer))
+            t = w.title_cat
+            bx, by, bw, bh = t.cat_box
+            for _ in range(4):
+                t.on_click(None, 1, bx + bw / 2, by + bh / 2)
+            check(r.mode == "title", "playtime started before 5 clicks")
+            t.on_click(None, 1, bx + bw / 2, by + bh / 2)
+            check(r.play_until > 0, "5 clicks on the cat did not start playtime")
+            r.pointer = (r.area_w() - 40, r.area_h() - 40)
+
+        @step
+        def playtime_chase(w):
+            r = next(c for c in [w.overlay.get_last_child()] if isinstance(c, cat.CatRoamer))
+            x, y = r.anchor()
+            check(abs(x - (r.area_w() - 40)) < 25 and abs(y - (r.area_h() - 40)) < 25, f"cat did not reach the pointer: {x:.0f},{y:.0f}")
+            r.on_pointer_leave(None)
+            r.pointer_left -= 5
+
+        @step
+        def playtime_end(w):
+            r = next(c for c in [w.overlay.get_last_child()] if isinstance(c, cat.CatRoamer))
+            check(r.mode == "title" and not w.title_cat.away, f"cat did not return after playtime: {r.mode}")
             w.title_cat.forced = None
             w.hours.set_value(6.5)
             w.close()
@@ -132,7 +159,8 @@ class AppTest(unittest.TestCase):
             except Exception:
                 failures.append(f"{steps[i].__name__}: {traceback.format_exc()}")
             if i + 1 < len(steps):
-                wait = {roamer_in_bounds: 3500, side_panels: 1500, new_day: 1500}.get(steps[i], 900)
+                wait = {roamer_in_bounds: 3500, side_panels: 1500, new_day: 1500,
+                        playtime_start: 2500, playtime_chase: 2000}.get(steps[i], 900)
                 GLib.timeout_add(wait, lambda: run(i + 1) and False)
             else:
                 GLib.timeout_add(500, lambda: app.quit() and False)

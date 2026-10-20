@@ -60,6 +60,16 @@ class DbTest(unittest.TestCase):
         d = db.load_day(MON + timedelta(days=3))
         self.assertEqual((d["routine"][0]["text"], d["order"], d["hidden"]), ("Water", ["r:a", "email"], ["jira"]))
 
+    def test_streak_skips_weekend_and_day_off(self):
+        fri = MON + timedelta(days=4)
+        db.save_day(MON + timedelta(days=3), state(complete=True))   # torsdag
+        db.save_day(fri, state(complete=True))                          # fredag
+        db.set_hours(MON + timedelta(days=7), 0, True)                  # mandag: fri
+        tue = MON + timedelta(days=8)
+        self.assertEqual(db.streak_info(tue, False)["streak"], 2)      # helg + fridag bryter ikke
+        self.assertEqual(db.streak_info(tue, True), {"streak": 3, "best": 3})
+        self.assertEqual(db.streak_info(tue + timedelta(days=2), False), {"streak": 0, "best": 3})  # onsdag mangler
+
     def test_stale_lock_removed_fresh_kept(self):
         import os, time
         lock = env.TMP / "x.db.lock"
