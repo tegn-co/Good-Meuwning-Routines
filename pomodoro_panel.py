@@ -14,8 +14,8 @@ import gi
 gi.require_version("Gtk", "4.0")
 from gi.repository import GLib, Gtk  # noqa: E402
 
-import db  # noqa: E402
-from i18n import _  # noqa: E402
+import database as db  # noqa: E402
+from translations import _  # noqa: E402
 
 # Standardverdier; brukerens egne ligger i SETTINGS_FILE. "rounds" = lang pause etter så mange fokusøkter
 DEFAULTS = {"focus": 25, "short": 5, "long": 15, "rounds": 4}
@@ -136,11 +136,11 @@ class PomodoroPanel(Gtk.Box):
         except OSError:
             pass
         # Står klokka urørt i denne fasen, får den den nye tiden med en gang; ellers gjelder den fra neste fase
-        if key == self.phase and not self.running() and not self.started():
+        if key == self.phase and not self.running() and not self.has_started():
             self.remaining = self.full_remaining = timedelta(minutes=self.settings[key])
         self.refresh()
 
-    def started(self):
+    def has_started(self):
         """Er det gått tid i denne fasen (pauset midt i)?"""
         return self.remaining != self.full_remaining
 
@@ -163,20 +163,20 @@ class PomodoroPanel(Gtk.Box):
     def running(self):
         return self.ends_at is not None
 
-    def left(self):
+    def time_left(self):
         return max(timedelta(0), self.ends_at - datetime.now()) if self.running() else self.remaining
 
-    def clock(self):
-        secs = int(self.left().total_seconds() + 0.999)
+    def clock_text(self):
+        secs = int(self.time_left().total_seconds() + 0.999)
         return f"{secs // 60:02d}:{secs % 60:02d}"
 
     def tick(self):
-        if self.running() and self.left() <= timedelta(0):
+        if self.running() and self.time_left() <= timedelta(0):
             self.finish_phase()
         self.refresh()
         return True
 
-    def roll_over_day(self):
+    def reset_counter_on_new_day(self):
         """Står vinduet åpent over midnatt, begynner tellingen på nytt for den nye dagen."""
         if date.today() != self.stats_date:
             self.stats_date = date.today()
@@ -184,7 +184,7 @@ class PomodoroPanel(Gtk.Box):
             self.done_in_cycle = 0
 
     def finish_phase(self):
-        self.roll_over_day()
+        self.reset_counter_on_new_day()
         if self.phase == "focus":
             self.today += 1
             self.done_in_cycle += 1
@@ -192,11 +192,11 @@ class PomodoroPanel(Gtk.Box):
             nxt = "long" if self.done_in_cycle % self.settings["rounds"] == 0 else "short"
             notify(_("🍅 Focus done"), _("Time for a {n} min break.").format(n=self.settings[nxt]))
             self.set_phase(nxt, autostart=True)  # pausen starter av seg selv
-            self.cat.react("break", 3)
+            self.cat.react_to("break", 3)
         else:
             notify(_("🍅 Break over"), _("Ready for the next focus session?"))
             self.set_phase("focus", autostart=False)  # fokus starter når du trykker start
-            self.cat.react("focus", 3)
+            self.cat.react_to("focus", 3)
 
     def set_phase(self, phase, autostart):
         self.phase = phase
@@ -205,9 +205,9 @@ class PomodoroPanel(Gtk.Box):
         self.ends_at = datetime.now() + self.remaining if autostart else None
 
     def refresh(self):
-        self.roll_over_day()
-        left = self.left()
-        self.time.set_label(self.clock())
+        self.reset_counter_on_new_day()
+        left = self.time_left()
+        self.time.set_label(self.clock_text())
         total = self.full_remaining.total_seconds()
         filled = max(0, min(20, round(20 * (1 - left.total_seconds() / total))))
         pal = self.palette()
@@ -218,7 +218,7 @@ class PomodoroPanel(Gtk.Box):
         rounds = self.settings["rounds"]
         dots = "■" * (self.done_in_cycle % rounds) + "□" * (rounds - self.done_in_cycle % rounds)
         self.sessions.set_label(_("{dots}   today: {n}").format(dots=dots, n=self.today))
-        self.phase_lbl.set_label(_(PHASE_NAMES[self.phase]) + ("" if self.running() else _(" · paused") if self.started() else ""))
+        self.phase_lbl.set_label(_(PHASE_NAMES[self.phase]) + ("" if self.running() else _(" · paused") if self.has_started() else ""))
         self.start_btn.set_label(_("pause") if self.running() else _("start"))
         # Katten følger pomodoroen mens den går; ellers vanlige animasjoner
         self.cat.mode = CAT_MODE[self.phase] if self.running() else None
@@ -228,12 +228,12 @@ class PomodoroPanel(Gtk.Box):
     # --- knapper ---
     def on_start(self, _):
         if self.running():
-            self.remaining = self.left()
+            self.remaining = self.time_left()
             self.ends_at = None
         else:
             self.ends_at = datetime.now() + self.remaining
             if self.phase == "focus":
-                self.cat.react("start")
+                self.cat.react_to("start")
         self.refresh()
 
     def on_reset(self, _):

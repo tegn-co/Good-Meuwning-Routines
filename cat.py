@@ -10,7 +10,7 @@ Fem animasjoner som byttes hvert 15. minutt:
           og bokstaven den lander på spretter
 I lunsjtimen (standard 11–12, endres under ⚙ → schedule) spiser katten (eat) fra en skål oppå tittelen, og maten
 minker utover timen.
-  climb – hopper ut på vinduskanten og klatrer rundt rammen (se CatRoamer)
+  climb – hopper ut på vinduskanten og klatrer rundt rammen (se CatOverlay)
   butterfly – jager en sommerfugl langs tittelen og hopper etter den
   groom – sitter og vasker seg med labben
   stretch – strekker seg (baken i været), rusler litt, strekker seg igjen
@@ -38,8 +38,8 @@ gi.require_version("PangoCairo", "1.0")
 gi.require_version("Graphene", "1.0")
 from gi.repository import GLib, Graphene, Gtk, Pango, PangoCairo  # noqa: E402
 
-from db import CONFIG_DIR  # noqa: E402  (samme innstillingsmappe som resten av appen, følger XDG_CONFIG_HOME)
-from i18n import _  # noqa: E402
+from database import CONFIG_DIR  # noqa: E402  (samme innstillingsmappe som resten av appen, følger XDG_CONFIG_HOME)
+from translations import _  # noqa: E402
 
 PX = 2  # skjermpiksler per sprite-piksel
 PLAYTIME_SECONDS = 30  # så lenge katten leker med musepekeren før den går tilbake til tittelen
@@ -113,7 +113,7 @@ def save_cat_settings():
         pass
 
 
-def phrase(event):
+def random_phrase(event):
     """En tilfeldig replikk for hendelsen, eller "" hvis katten skal være stille."""
     options = [p.strip() for p in PHRASES.get(event, "").split("|") if p.strip()]
     return random.choice(options) if options else ""
@@ -122,7 +122,7 @@ def phrase(event):
 load_cat_settings()
 
 
-def _walker(legs):
+def _side_view_cat(legs):
     """Sidekropp med hale til venstre, hode som ser rett fram til høyre, og to rader bein."""
     return [
         "b.........." + "b.....b",
@@ -139,12 +139,12 @@ def _walker(legs):
 
 FILL = {
     "walk": [
-        _walker(["..bb.bb....bb.bb..", "..ww.ww....ww.ww.."]),
-        _walker([".bb...bb...bb..bb.", ".ww...ww...ww..ww."]),
+        _side_view_cat(["..bb.bb....bb.bb..", "..ww.ww....ww.ww.."]),
+        _side_view_cat([".bb...bb...bb..bb.", ".ww...ww...ww..ww."]),
     ],
     "run": [
-        _walker([".bb...........bb..", "ww.............ww."]),
-        _walker(["....bbb....bbb....", "....ww......ww...."]),
+        _side_view_cat([".bb...........bb..", "ww.............ww."]),
+        _side_view_cat(["....bbb....bbb....", "....ww......ww...."]),
     ],
     "sit": [
         [
@@ -316,7 +316,7 @@ HEART = [".p.p.", "ppppp", "ppppp", ".ppp.", "..p.."]
 Z = ["eee", "..e", ".e.", "e..", "eee"]
 
 
-def outline(fill):
+def add_outline(fill):
     """Legg en 1 piksel mørk kontur rundt fyllet."""
     w = max(len(r) for r in fill) + 2
     grid = ["." * w] + ["." + r.ljust(w - 2, ".") + "." for r in fill] + ["." * w]
@@ -336,7 +336,7 @@ def outline(fill):
     return out
 
 
-def fluffy(fill):
+def maine_coon_shape(fill):
     """Maine Coon-form: høye, mørke dusker på øretuppene og en dobbelt så tykk hale."""
     rows = list(fill)
     # Halen: rader som starter med en enkelt pelspiksel helt til venstre får en piksel til
@@ -358,15 +358,15 @@ def fluffy(fill):
     return rows
 
 
-SHAPES = {"normal": lambda f: f, "fluffy": fluffy}
+SHAPES = {"normal": lambda f: f, "fluffy": maine_coon_shape}  # "fluffy" is the saved setting value
 SPRITES = {}
-BUTTERFLY_SPRITES = [outline(b) for b in BUTTERFLY]
+BUTTERFLY_SPRITES = [add_outline(b) for b in BUTTERFLY]
 
 
 def set_shape(shape):
     """Bygg spritene for en form (endrer SPRITES på stedet, så katten bruker dem med en gang)."""
     SETTINGS["shape"] = shape if shape in SHAPES else "normal"
-    SPRITES.update({name: [outline(SHAPES[SETTINGS["shape"]](f)) for f in frames] for name, frames in FILL.items()})
+    SPRITES.update({name: [add_outline(SHAPES[SETTINGS["shape"]](f)) for f in frames] for name, frames in FILL.items()})
 
 
 set_shape(SETTINGS["shape"])
@@ -386,7 +386,7 @@ COLORS.update(h="#4a7bd0", H="#e9e6de", r="#d63a3a", W="#ffffff", q="#c93a4a", C
 _DRESSED = {}
 
 
-def season(today=None):
+def current_season(today=None):
     if SEASON_OVERRIDE:
         return None if SEASON_OVERRIDE == "none" else SEASON_OVERRIDE
     d = today or datetime.now().date()
@@ -397,25 +397,25 @@ def season(today=None):
     return None
 
 
-def wearing():
+def worn_accessories():
     """Tilbehøret katten har på seg akkurat nå."""
     wear = SETTINGS.get("wear", {})
     on = [k for k, _, _ in UNLOCKS if k in UNLOCKED and wear.get(k, True)]
-    if season() == "december":
+    if current_season() == "december":
         on = [k for k in on if k != "beanie"] + ["santa"]  # nisselua går foran lua
     return tuple(on)
 
 
-def active_colors():
+def current_colors():
     """Vanlige farger, eller spøkelsesfarger i halloween-uka."""
-    if season() != "halloween":
+    if current_season() != "halloween":
         return COLORS
     return dict(COLORS, b="#f4f4f6", s="#d9dbe2", w="#ffffff", o="#9a9cab", p="#c7c9d6", e="#2b2b33")
 
 
-def dress(sprite):
+def add_accessories(sprite):
     """Legg tilbehøret (lue, sløyfe) inn i selve spriten, så det følger med når katten snur og roterer."""
-    on = wearing()
+    on = worn_accessories()
     hats = [a for a in on if a in ("beanie", "santa")]
     if not hats and "bowtie" not in on:
         return sprite
@@ -427,7 +427,7 @@ def dress(sprite):
 
     def stamp(acc, top, center, with_outline=True):
         nonlocal grid
-        acc = outline(acc) if with_outline else acc
+        acc = add_outline(acc) if with_outline else acc
         left = round(center - (len(acc[0]) - 1) / 2)
         if top < 0:  # luen stikker over spriten: legg til rader øverst (føttene står fortsatt nederst)
             grid = [["."] * w for _ in range(-top)] + grid
@@ -460,7 +460,7 @@ def dress(sprite):
     return result
 
 
-def yawn(sprite):
+def yawning_sprite(sprite):
     """Gjesp: øynene igjen og munnen åpen (under nesen)."""
     rows = [r.replace("e", "o") for r in sprite]
     for r, row in enumerate(rows[:-1]):
@@ -471,10 +471,10 @@ def yawn(sprite):
             break
     return rows
 _BOWL = ["..ffffff..", ".ffffffff.", "cccccccccc", ".cccccccc.", "..cccccc.."]
-BOWLS = [outline(_BOWL[2 - food:]) for food in (2, 1, 0)]  # full, halv, tom
+BOWLS = [add_outline(_BOWL[2 - food:]) for food in (2, 1, 0)]  # full, halv, tom
 
 
-def detached(widget):
+def was_closed(widget):
     """True når widgeten har vært i et vindu som nå er lukket (da stopper timeren dens)."""
     if widget.get_root() is not None:
         widget._was_rooted = True
@@ -482,11 +482,11 @@ def detached(widget):
     return getattr(widget, "_was_rooted", False)
 
 
-def size(sprite):
+def sprite_size(sprite):
     return max(len(r) for r in sprite), len(sprite)
 
 
-def rgb(hexc):
+def hex_to_rgb(hexc):
     return int(hexc[1:3], 16) / 255, int(hexc[3:5], 16) / 255, int(hexc[5:7], 16) / 255
 
 
@@ -511,7 +511,7 @@ class TitleCat(Gtk.DrawingArea):
         self.swat_at, self.swat_t = 0.0, -10.0
         self.happy_until = 0.0
         self.in_gap = False
-        self.external = False  # True: katten tegnes av CatRoamer (laget over vinduet), ikke her
+        self.external = False  # True: katten tegnes av CatOverlay (laget over vinduet), ikke her
         self.away = False  # True: katten er ute på vinduskanten, tittelen står uten katt
         self.top = 0
         self.speech, self.speech_until = "", 0.0
@@ -530,7 +530,7 @@ class TitleCat(Gtk.DrawingArea):
         if self.mode:
             return self.mode
         now = datetime.now()
-        if 0 <= self.lunch_minute(now) < self.lunch_length():
+        if 0 <= self.minutes_into_lunch(now) < self.lunch_duration():
             return "eat"
         if now.hour >= 16 and (now.hour * 60 + now.minute) // SWITCH_MINUTES % 2 == 0:
             return "sleep"  # søvnig på ettermiddagen: annenhver kvarter sover den
@@ -543,24 +543,24 @@ class TitleCat(Gtk.DrawingArea):
         lay.set_text(text, -1)
         return lay
 
-    def lunch_minute(self, now):
+    def minutes_into_lunch(self, now):
         """Minutter siden lunsjen startet (negativt før lunsj)."""
         return now.hour * 60 + now.minute - LUNCH[0]
 
-    def lunch_length(self):
+    def lunch_duration(self):
         return max(1, LUNCH[1] - LUNCH[0])
 
-    def letter_at(self, x):
+    def letter_index_at(self, x):
         for i, (lx, lw) in enumerate(self.letters):
             if lx <= x < lx + lw and self.title[i] != " ":
                 return i
         return None
 
-    def kick(self, x, strength):
-        if (i := self.letter_at(x)) is not None:
+    def bounce_letter(self, x, strength):
+        if (i := self.letter_index_at(x)) is not None:
             self.vy[i] += strength
 
-    def span(self):
+    def walkable_range(self):
         """Området katten kan gå på (fra første til siste bokstav)."""
         if not self.letters:
             return 0, 100
@@ -568,7 +568,7 @@ class TitleCat(Gtk.DrawingArea):
 
     # --- animasjon ---
     def tick(self, widget, clock):
-        if detached(self):
+        if was_closed(self):
             return False
         now = time.monotonic()
         dt, self.last = min(now - self.last, 0.05), now
@@ -579,7 +579,7 @@ class TitleCat(Gtk.DrawingArea):
         anim = self.animation()
         if anim != self.anim or len(self.dy) != len(self.title):
             self.start(anim)
-        lo, hi = self.span()
+        lo, hi = self.walkable_range()
         cw = 20 * PX
         if anim == "climb" and not self.external:
             anim = "walk"
@@ -588,9 +588,9 @@ class TitleCat(Gtk.DrawingArea):
             pass
         elif anim == "butterfly":
             self.butterfly_tick(dt, lo, hi, cw)
-        elif anim in ("walk", "play") or self.stretch_walking(anim):
+        elif anim in ("walk", "play") or self.is_stretch_walk(anim):
             speed = 70 if anim == "play" else 28
-            if self.gap_arc(self.x + cw / 2) > 0:
+            if self.gap_jump_height(self.x + cw / 2) > 0:
                 speed *= 2.5  # et raskt sprett over mellomrommet, ikke et langsomt svev
             self.x += self.dir * speed * dt
             if anim == "play":
@@ -601,20 +601,20 @@ class TitleCat(Gtk.DrawingArea):
                     self.dir *= -1
                     self.cursor_vy = -140
                     self.ball_x = self.x + (cw + 6 if self.dir > 0 else -18)
-                self.kick(self.ball_x + 6, 4)
+                self.bounce_letter(self.ball_x + 6, 4)
             if self.x > hi - cw:
                 self.x, self.dir = hi - cw, -1
             elif self.x < lo:
                 self.x, self.dir = lo, 1
             # Hopp over mellomrom: bokstaven den lander på spretter
-            arc = self.gap_arc(self.x + cw / 2)
+            arc = self.gap_jump_height(self.x + cw / 2)
             if self.in_gap and arc == 0:
-                self.kick(self.x + cw / 2, 120)
+                self.bounce_letter(self.x + cw / 2, 120)
             self.in_gap = arc > 0
             frame = int(self.t * (10 if anim == "play" else 6)) % 2
             if frame != self.prev_frame and not self.in_gap:
                 # Potene trykker ned bokstaven de tråkker på
-                self.kick(self.x + (6 if frame else cw - 8), 40 if anim == "play" else 25)
+                self.bounce_letter(self.x + (6 if frame else cw - 8), 40 if anim == "play" else 25)
                 self.prev_frame = frame
         elif anim == "jump":
             h = self.hop
@@ -622,9 +622,9 @@ class TitleCat(Gtk.DrawingArea):
             h["t"] += dt / 0.6
             self.x = h["from"] + (h["to"] - h["from"]) * min(h["t"], 1)
             if was_flying and h["t"] >= 1:
-                self.kick(self.x + cw / 2, 140)  # landing: bokstaven spretter
+                self.bounce_letter(self.x + cw / 2, 140)  # landing: bokstaven spretter
             if h["t"] >= 1.8:  # hvilt litt på bokstaven, hopp videre
-                target = self.jump_target(lo, hi, cw)
+                target = self.next_jump_spot(lo, hi, cw)
                 self.dir = 1 if target >= self.x else -1
                 self.hop = {"from": self.x, "to": target, "t": 0.0}
         elif anim == "sleep":
@@ -637,7 +637,7 @@ class TitleCat(Gtk.DrawingArea):
             frame = int(self.t * 2.5) % 2
             if frame != self.prev_frame:
                 # Skåla dytter litt på bokstaven den står på for hver bit
-                self.kick(self.x + 20 * PX, 18)
+                self.bounce_letter(self.x + 20 * PX, 18)
                 self.prev_frame = frame
         elif anim == "sit" and self.t >= self.swat_at:
             # Slå til markøren
@@ -658,12 +658,12 @@ class TitleCat(Gtk.DrawingArea):
         self.cursor_y = min(0.0, self.cursor_y + self.cursor_vy * dt)
         if self.cursor_y == 0.0:
             self.cursor_vy = 0.0
-        if now - getattr(self, "drawn_at", 0) >= 1 / (CALM_FPS if self.calm() else FPS) - 0.005:
+        if now - getattr(self, "drawn_at", 0) >= 1 / (CALM_FPS if self.is_calm() else FPS) - 0.005:
             self.drawn_at = now
             self.queue_draw()
         return True
 
-    def stretch_walking(self, anim):
+    def is_stretch_walk(self, anim):
         """stretch: 3 s strekk, så 5 s rusling, om igjen."""
         return anim == "stretch" and (self.t % 8) >= 3
 
@@ -677,7 +677,7 @@ class TitleCat(Gtk.DrawingArea):
         if self.t - self.pounce_t < 0.6:
             return  # midt i et hopp
         if self.pounce_t and self.t - self.pounce_t < 0.65:
-            self.kick(self.x + cw / 2, 120)  # landing
+            self.bounce_letter(self.x + cw / 2, 120)  # landing
         target = bf["x"] - cw / 2
         if abs(target - self.x) > 2:
             self.dir = 1 if target > self.x else -1
@@ -687,15 +687,15 @@ class TitleCat(Gtk.DrawingArea):
             self.pounce_t = self.t  # hopp!
             bf["tx"] = random.uniform(lo, hi)  # og den flyr unna
 
-    def calm(self):
+    def is_calm(self):
         """Står alt stille nok til at færre bilder i sekundet holder?"""
-        moving = (self.anim in ("walk", "play", "jump", "butterfly") or self.stretch_walking(self.anim)) and not self.away
+        moving = (self.anim in ("walk", "play", "jump", "butterfly") or self.is_stretch_walk(self.anim)) and not self.away
         bouncing = any(self.vy) or self.cursor_y < 0 or self.t < self.speech_until + 0.3
         return not moving and not bouncing
 
     def start(self, anim):
         self.anim = anim
-        lo, hi = self.span()
+        lo, hi = self.walkable_range()
         cw = 20 * PX
         self.dy = [0.0] * len(self.title)
         self.vy = [0.0] * len(self.title)
@@ -717,12 +717,12 @@ class TitleCat(Gtk.DrawingArea):
             self.bf = {"x": self.x + cw + 30, "tx": self.x + cw + 60}
             self.pounce_t = 0.0
         elif anim == "jump":
-            self.x = self.jump_target(lo, hi, cw)
+            self.x = self.next_jump_spot(lo, hi, cw)
             self.hop = {"from": self.x, "to": self.x, "t": 1.0}
         else:
             self.x = max(lo, min(hi - cw, self.x))
 
-    def gaps(self):
+    def word_gaps(self):
         """(venstre, høyre) kant for hvert mellomrom mellom ord i tittelen."""
         out = []
         for i, ch in enumerate(self.title):
@@ -731,16 +731,16 @@ class TitleCat(Gtk.DrawingArea):
                 out.append((left, self.letters[i + 1][0]))
         return out
 
-    def gap_arc(self, cx):
+    def gap_jump_height(self, cx):
         """0..1: hvor høyt katten er i hoppet over et mellomrom, ut fra hvor midten av katten er."""
         reach = 6 * PX  # hoppet starter/slutter så langt før/etter mellomrommet
-        for left, right in self.gaps():
+        for left, right in self.word_gaps():
             a, b = left - reach, right + reach
             if a < cx < b:
                 return math.sin(math.pi * (cx - a) / (b - a))
         return 0.0
 
-    def jump_target(self, lo, hi, cw):
+    def next_jump_spot(self, lo, hi, cw):
         """Bokstaven på andre siden av mellomrommet (D <-> M); uten mellomrom: en tilfeldig bokstav."""
         gap = self.title.find(" ")
         if gap > 0 and gap + 1 < len(self.title):
@@ -764,7 +764,7 @@ class TitleCat(Gtk.DrawingArea):
                 self.cat_clicks = []
                 self.on_playtime()
                 return
-        self.react("click")
+        self.react_to("click")
 
     def say(self, text, seconds=2.0):
         if text:
@@ -772,26 +772,26 @@ class TitleCat(Gtk.DrawingArea):
             self.speech_start = self.t
         self.happy_until = self.t + 1.6
 
-    def react(self, event, seconds=2.0):
+    def react_to(self, event, seconds=2.0):
         """Si replikken for en hendelse (se EVENTS); tom replikk gir bare et hjerte."""
-        self.say(phrase(event), seconds)
+        self.say(random_phrase(event), seconds)
 
     # --- tegning ---
-    def blit(self, cr, sprite, x, y, flip=False, colors=None, alpha=1.0):
-        colors = colors or active_colors()
+    def draw_sprite(self, cr, sprite, x, y, flip=False, colors=None, alpha=1.0):
+        colors = colors or current_colors()
         used = {ch: colors[ch] for ch in set("".join(sprite)) if ch != "."}
         key = (tuple(sprite), flip, tuple(sorted(used.items())))
         surf = _SURFACES.get(key)
         if surf is None:
             if len(_SURFACES) > 400:  # f.eks. etter mange fargebytter
                 _SURFACES.clear()
-            w, h = size(sprite)
+            w, h = sprite_size(sprite)
             surf = cairo.ImageSurface(cairo.FORMAT_ARGB32, w * PX, h * PX)
             sc = cairo.Context(surf)
             for row, line in enumerate(sprite):
                 for col, ch in enumerate(line):
                     if ch != ".":
-                        sc.set_source_rgb(*rgb(used[ch]))
+                        sc.set_source_rgb(*hex_to_rgb(used[ch]))
                         sc.rectangle(((w - 1 - col) if flip else col) * PX, row * PX, PX, PX)
                         sc.fill()
             _SURFACES[key] = surf
@@ -802,7 +802,7 @@ class TitleCat(Gtk.DrawingArea):
         else:
             cr.paint()
 
-    def glyph(self, cr, ch, color):
+    def letter_surface(self, cr, ch, color):
         """En bokstav i tittelen som ferdig bilde (tegnes én gang per bokstav og farge)."""
         key = ("glyph", ch, color, self.font_px)
         surf = _SURFACES.get(key)
@@ -811,7 +811,7 @@ class TitleCat(Gtk.DrawingArea):
             _, log = lay.get_pixel_extents()
             surf = cairo.ImageSurface(cairo.FORMAT_ARGB32, max(1, log.width + 2), max(1, log.height + 2))
             sc = cairo.Context(surf)
-            sc.set_source_rgb(*rgb(color))
+            sc.set_source_rgb(*hex_to_rgb(color))
             PangoCairo.show_layout(sc, self.layout(sc, ch))
             _SURFACES[key] = surf
         return surf
@@ -839,7 +839,7 @@ class TitleCat(Gtk.DrawingArea):
         # Tittelen, bokstav for bokstav med egen forskyvning
         for i, ch in enumerate(self.title):
             if ch != " ":
-                cr.set_source_surface(self.glyph(cr, ch, pal["fg"]), self.letters[i][0], round(base_y + self.dy[i]))
+                cr.set_source_surface(self.letter_surface(cr, ch, pal["fg"]), self.letters[i][0], round(base_y + self.dy[i]))
                 cr.paint()
 
         anim = self.anim
@@ -852,7 +852,7 @@ class TitleCat(Gtk.DrawingArea):
 
         # Markøren «_»
         end_x = self.letters[-1][0] + self.letters[-1][1] + 2
-        cr.set_source_rgb(*rgb(pal["accent"]))
+        cr.set_source_rgb(*hex_to_rgb(pal["accent"]))
         if anim == "eat":
             pass  # markøren tar lunsjpause
         elif anim == "play":
@@ -876,8 +876,8 @@ class TitleCat(Gtk.DrawingArea):
         # Katten
         flip = self.dir < 0
         y_off = 0
-        if anim in ("walk", "play") or self.stretch_walking(anim):
-            arc = self.gap_arc(self.x + 10 * PX)
+        if anim in ("walk", "play") or self.is_stretch_walk(anim):
+            arc = self.gap_jump_height(self.x + 10 * PX)
             if arc > 0.1:  # i lufta over et mellomrom
                 sprite = SPRITES["run"][0]
                 y_off = -arc * 18
@@ -890,8 +890,8 @@ class TitleCat(Gtk.DrawingArea):
             for i in range(3):  # z-er som stiger
                 phase = (self.t / 3 + i / 3) % 1
                 zx = self.x + 16 * PX + phase * 14
-                zy = top - size(sprite)[1] * PX - 6 - phase * 26
-                self.blit(cr, Z, zx, zy, colors={"e": pal["muted"]}, alpha=1 - phase)
+                zy = top - sprite_size(sprite)[1] * PX - 6 - phase * 26
+                self.draw_sprite(cr, Z, zx, zy, colors={"e": pal["muted"]}, alpha=1 - phase)
         elif anim == "eat":
             sprite = SPRITES["eat"][int(self.t * 2.5) % 2]
         elif anim == "sit":
@@ -911,7 +911,7 @@ class TitleCat(Gtk.DrawingArea):
                 sprite = SPRITES["walk"][int(self.t * 6) % 2] if abs(self.bf["x"] - 10 * PX - self.x) > 3 else SPRITES["sit"][0]
             # Sommerfuglen over bokstavene, vingene slår
             by = top - 20 * PX - 4 + math.sin(self.t * 2.2) * 12
-            self.blit(cr, BUTTERFLY_SPRITES[int(self.t * 8) % 2], self.bf["x"] - 7, by)
+            self.draw_sprite(cr, BUTTERFLY_SPRITES[int(self.t * 8) % 2], self.bf["x"] - 7, by)
         else:  # jump
             arc = math.sin(math.pi * min(self.hop["t"], 1))
             sprite = SPRITES["run"][0] if arc > 0.2 else SPRITES["walk"][0]
@@ -919,23 +919,23 @@ class TitleCat(Gtk.DrawingArea):
 
         # Blunk av og til (ikke når den sover), og gjesp om morgenen
         if anim != "sleep" and datetime.now().hour < 9 and self.t % 20 < 1.2:
-            sprite = yawn(sprite)
+            sprite = yawning_sprite(sprite)
         elif anim != "sleep" and (self.t % 4.2) < 0.12:
             sprite = [r.replace("e", "b") for r in sprite]
-        sprite = dress(sprite)
+        sprite = add_accessories(sprite)
 
-        cat_y = top - size(sprite)[1] * PX + PX + y_off  # nederste kontur står på bokstavene
-        self.blit(cr, sprite, self.x, cat_y, flip)
-        if "coffee" in wearing() and anim in ("sit", "groom", "sleep", "stretch") and not self.stretch_walking(anim):
+        cat_y = top - sprite_size(sprite)[1] * PX + PX + y_off  # nederste kontur står på bokstavene
+        self.draw_sprite(cr, sprite, self.x, cat_y, flip)
+        if "coffee" in worn_accessories() and anim in ("sit", "groom", "sleep", "stretch") and not self.is_stretch_walk(anim):
             # Kaffekoppen står ved siden av katten, med litt damp
-            cx = self.x - 7 * PX if flip else self.x + size(sprite)[0] * PX + 2
-            self.blit(cr, outline(CUP), cx, top - (len(CUP) + 2) * PX + PX)
+            cx = self.x - 7 * PX if flip else self.x + sprite_size(sprite)[0] * PX + 2
+            self.draw_sprite(cr, add_outline(CUP), cx, top - (len(CUP) + 2) * PX + PX)
             for i in range(2):
                 phase = (self.t / 2 + i / 2) % 1
-                cr.set_source_rgba(*rgb(pal["muted"]), 1 - phase)
+                cr.set_source_rgba(*hex_to_rgb(pal["muted"]), 1 - phase)
                 cr.rectangle(round(cx + 3 * PX + math.sin(phase * 6 + i) * 3), round(top - 8 * PX - phase * 14), PX, PX)
                 cr.fill()
-        self.cat_box = (self.x, cat_y, size(sprite)[0] * PX, size(sprite)[1] * PX)  # for klikk på katten
+        self.cat_box = (self.x, cat_y, sprite_size(sprite)[0] * PX, sprite_size(sprite)[1] * PX)  # for klikk på katten
 
         if anim == "eat":
             # Skåla foran hodet (tegnes over så hodet ser ut til å være nede i den); maten minker utover timen
@@ -943,26 +943,26 @@ class TitleCat(Gtk.DrawingArea):
             if self.forced == "eat" or self.mode == "eat":
                 part = (self.t / 15) % 1  # testing eller lang pomodoro-pause: ikke knyttet til lunsjtiden
             else:
-                part = self.lunch_minute(datetime.now()) / self.lunch_length()
+                part = self.minutes_into_lunch(datetime.now()) / self.lunch_duration()
             bowl = BOWLS[max(0, min(2, int(part * 3)))]
             bx = self.x + 16 * PX
-            self.blit(cr, bowl, bx, top - size(bowl)[1] * PX + PX)
+            self.draw_sprite(cr, bowl, bx, top - sprite_size(bowl)[1] * PX + PX)
             # «nom» som stiger opp innimellom
             phase = (self.t % 2.2) / 2.2
             if part < 2 / 3 and phase < 0.7:  # ingen «nom» når skåla er tom
-                cr.set_source_rgba(*rgb(pal["muted"]), 1 - phase / 0.7)
+                cr.set_source_rgba(*hex_to_rgb(pal["muted"]), 1 - phase / 0.7)
                 cr.move_to(bx + 22 + phase * 8, top - 30 - phase * 18)
                 nom = self.layout(cr, _("nom"))
                 nom.set_font_description(Pango.FontDescription.from_string("Silkscreen 8px"))
                 PangoCairo.show_layout(cr, nom)
 
         if self.t < self.speech_until:
-            self.draw_bubble(cr, pal, width, self.x + size(sprite)[0] * PX / 2, cat_y - 4)
+            self.draw_speech_bubble(cr, pal, width, self.x + sprite_size(sprite)[0] * PX / 2, cat_y - 4)
         elif self.t < self.happy_until:
             rise = (1 - (self.happy_until - self.t) / 1.6) * 14
-            self.blit(cr, HEART, self.x + size(sprite)[0] * PX / 2 - 5, cat_y - 14 - rise)
+            self.draw_sprite(cr, HEART, self.x + sprite_size(sprite)[0] * PX / 2 - 5, cat_y - 14 - rise)
 
-    def draw_bubble(self, cr, pal, width, cx, bottom):
+    def draw_speech_bubble(self, cr, pal, width, cx, bottom):
         """Pixel-snakkeboble med hale ned mot katten."""
         lay = self.layout(cr, self.speech)
         lay.set_font_description(Pango.FontDescription.from_string("Silkscreen 8px"))
@@ -976,20 +976,20 @@ class TitleCat(Gtk.DrawingArea):
         cr.translate(x + w / 2, y + h)
         cr.scale(pop, pop)
         cr.translate(-(x + w / 2), -(y + h))
-        cr.set_source_rgb(*rgb(pal["fg"]))
+        cr.set_source_rgb(*hex_to_rgb(pal["fg"]))
         cr.rectangle(x, y, w, h)
         cr.fill()
         tail = round(max(x + 3, min(x + w - 7, cx - 2)))
         for i in range(3):  # trappetrinn-hale
             cr.rectangle(tail + i, y + h + i, 4 - i, 1 * 2)
         cr.fill()
-        cr.set_source_rgb(*rgb(pal["bg"]))
+        cr.set_source_rgb(*hex_to_rgb(pal["bg"]))
         cr.move_to(x + 5, y + 3)
         PangoCairo.show_layout(cr, lay)
         cr.restore()
 
 
-class CatRoamer(Gtk.DrawingArea):
+class CatOverlay(Gtk.DrawingArea):
     """Gjennomsiktig lag over hele vinduet som tegner katten.
 
     Selve tegneflaten er bare en liten rute (BOX) som overlay-et plasserer der katten er (get-child-position);
@@ -1011,7 +1011,7 @@ class CatRoamer(Gtk.DrawingArea):
         self.overlay = overlay
         self.set_draw_func(self.draw_canvas)
         overlay.add_overlay(self)
-        overlay.connect("get-child-position", self.position)
+        overlay.connect("get-child-position", self.place_canvas)
         self.origin = (0, 0)
         # Påskeegget «playtime»: katten hopper etter musepekeren
         self.pointer = None  # (x, y) i overlay-et, None når pekeren er utenfor
@@ -1031,7 +1031,7 @@ class CatRoamer(Gtk.DrawingArea):
         self.last = time.monotonic()
         GLib.timeout_add(1000 // FPS, self.tick, None, None)
 
-    def position(self, overlay, widget, rect):
+    def place_canvas(self, overlay, widget, rect):
         if widget is not self:
             return False
         rect.x, rect.y = self.origin
@@ -1039,10 +1039,10 @@ class CatRoamer(Gtk.DrawingArea):
         return True
 
     # Rammen = overlay-et (det synlige innholdet), ikke denne lille tegneflaten
-    def area_w(self):
+    def area_width(self):
         return self.overlay.get_width()
 
-    def area_h(self):
+    def area_height(self):
         return self.overlay.get_height()
 
     # --- playtime ---
@@ -1056,16 +1056,16 @@ class CatRoamer(Gtk.DrawingArea):
         self.play_wait, self.play_catches = 0.0, 0
         self.title.away = True
         self.title.say(_(random.choice(["playtime!", "mrrrow!", "let's play!"])), 2)
-        x, y = self.anchor()
-        angle = self.frame_pose(self.s)[2] if self.mode == "frame" else 0.0
+        x, y = self.paw_position()
+        angle = self.pose_on_frame(self.s)[2] if self.mode == "frame" else 0.0
         self.enter = 0.0
         self.start_hop((x, y, angle), (x, y, 0.0), "playtime")  # et lite hopp på stedet, så jakten begynner
 
-    def play_target(self):
+    def playtime_landing_spot(self):
         """Der katten vil lande: ved pekeren, men innenfor vinduet."""
         px, py = self.pointer
-        return (max(self.HALF, min(self.area_w() - self.HALF, px)),
-                max(17 * PX, min(self.area_h() - 1, py)))
+        return (max(self.HALF, min(self.area_width() - self.HALF, px)),
+                max(17 * PX, min(self.area_height() - 1, py)))
 
     def playtime_tick(self, dt, now, tx, ty, visible):
         x, y = self.pt
@@ -1077,29 +1077,29 @@ class CatRoamer(Gtk.DrawingArea):
                 self.start_hop((x, y, 0.0), (tx, ty, 0.0), "title")
             else:
                 self.s, self.d = 0.0, 1
-                self.start_hop((x, y, 0.0), self.frame_pose(0.0), "frame")
+                self.start_hop((x, y, 0.0), self.pose_on_frame(0.0), "frame")
             return
         self.play_wait -= dt
         if self.play_wait <= 0 and self.pointer:
-            gx, gy = self.play_target()
+            gx, gy = self.playtime_landing_spot()
             if math.hypot(gx - x, gy - y) > 14:
                 self.pt_flip = gx < x
                 self.start_hop((x, y, 0.0), (gx, gy, 0.0), "playtime")
 
     # --- geometri ---
-    def sides(self):
+    def frame_edges(self):
         """Lengden på hver kant katten kan gå langs (midten av katten holder seg en halv katt fra hjørnene)."""
-        w, h, m = self.area_w(), self.area_h(), self.EDGE
+        w, h, m = self.area_width(), self.area_height(), self.EDGE
         return max(1, w - 2 * m - 2 * self.HALF), max(1, h - 2 * m - 2 * self.HALF), m
 
     def perimeter(self):
-        iw, ih, _ = self.sides()
+        iw, ih, _ = self.frame_edges()
         return 2 * (iw + ih)
 
-    def frame_pose(self, s):
+    def pose_on_frame(self, s):
         """(x, y, vinkel) for potene ved posisjon s langs rammen. Vinkelen peker kattens «ned» mot kanten."""
-        iw, ih, m = self.sides()
-        w, h, e = self.area_w(), self.area_h(), self.HALF
+        iw, ih, m = self.frame_edges()
+        w, h, e = self.area_width(), self.area_height(), self.HALF
         s %= max(1.0, self.perimeter())
         if s < iw:
             return m + e + s, h - m, 0.0  # bunnen, går mot høyre
@@ -1112,31 +1112,31 @@ class CatRoamer(Gtk.DrawingArea):
         s -= iw
         return m, m + e + s, math.pi / 2  # venstre vegg, klatrer ned
 
-    def title_pose(self):
+    def pose_on_title(self):
         """(x, y, synlig) for kattens poter på tittelen, i lagets koordinater."""
         ok, p = self.title.compute_point(self.overlay, Graphene.Point())
         if not ok:
             return 0, 0, False
         x = p.x + self.title.x + 10 * PX
         y = p.y + self.title.top + PX
-        visible = y - 17 * PX >= 0 and y <= self.area_h()  # hele katten må få plass
+        visible = y - 17 * PX >= 0 and y <= self.area_height()  # hele katten må få plass
         return x, y, visible
 
     # --- animasjon ---
     def tick(self, widget, clock):
-        if detached(self):
+        if was_closed(self):
             return False
         now = time.monotonic()
         dt, self.last = min(now - self.last, 0.05), now
-        if self.area_w() == 0:
+        if self.area_width() == 0:
             return True
-        tx, ty, visible = self.title_pose()
+        tx, ty, visible = self.pose_on_title()
         if self.mode == "playtime":
             self.playtime_tick(dt, now, tx, ty, visible)
-            tx, ty, visible = self.title_pose()
+            tx, ty, visible = self.pose_on_title()
         climbing = self.title.animation() == "climb"
         want_frame = not visible or climbing
-        iw, ih, m = self.sides()
+        iw, ih, m = self.frame_edges()
 
         if self.mode == "playtime":
             pass  # leken styrer selv (playtime_tick); hoppene i leken går gjennom "hop" under
@@ -1144,7 +1144,7 @@ class CatRoamer(Gtk.DrawingArea):
             self.title.away = True
             if not visible:
                 # Tittelen er scrollet bort: katten klatrer ned i rammen ovenfra langs nærmeste vegg
-                if tx < self.area_w() / 2:
+                if tx < self.area_width() / 2:
                     self.s, self.d = 2 * iw + ih, 1  # toppen av venstre vegg, nedover
                 else:
                     self.s, self.d = iw + ih, -1  # toppen av høyre vegg, nedover
@@ -1152,12 +1152,12 @@ class CatRoamer(Gtk.DrawingArea):
                 self.mode = "frame"
             else:
                 # climb: hopp fra tittelen ut på nærmeste sidevegg
-                if tx < self.area_w() / 2:
+                if tx < self.area_width() / 2:
                     s, d = 2 * iw + ih + max(0, ty - m), 1
                 else:
                     s, d = iw + (ih - max(0, ty - m)), -1
                 self.enter = 0.0  # kan være igjen fra en avbrutt inn-klatring
-                self.start_hop((tx, ty, 0.0), self.frame_pose(s), "frame")
+                self.start_hop((tx, ty, 0.0), self.pose_on_frame(s), "frame")
                 self.s, self.d = s, d
         elif self.mode == "frame":
             if self.enter > 0:
@@ -1165,8 +1165,8 @@ class CatRoamer(Gtk.DrawingArea):
             else:
                 self.s = (self.s + self.d * self.SPEED * dt) % max(1.0, self.perimeter())
             if not want_frame:
-                x, y = self.anchor()  # der katten faktisk er (også midt i inn-klatringen)
-                self.start_hop((x, y, self.frame_pose(self.s)[2]), (tx, ty, 0.0), "title")
+                x, y = self.paw_position()  # der katten faktisk er (også midt i inn-klatringen)
+                self.start_hop((x, y, self.pose_on_frame(self.s)[2]), (tx, ty, 0.0), "title")
                 self.enter = 0.0
         elif self.mode == "hop":
             self.hop["t"] += dt / 0.7
@@ -1177,19 +1177,19 @@ class CatRoamer(Gtk.DrawingArea):
                 if self.mode == "playtime":
                     self.pt = self.hop["to"][:2]
                     self.play_wait = 0.25
-                    if self.pointer and math.hypot(*(a - b for a, b in zip(self.play_target(), self.pt))) < 20:
+                    if self.pointer and math.hypot(*(a - b for a, b in zip(self.playtime_landing_spot(), self.pt))) < 20:
                         self.play_catches += 1  # landet på pekeren
                         self.play_wait = 0.8
                         if self.play_catches % 3 == 1:
                             self.title.say(_(random.choice(["got it!", "pounce!", "mrrp!", "gotcha!"])), 1.2)
                 if self.mode == "title":
                     self.title.away = False
-                    self.title.kick(self.title.x + 10 * PX, 120)  # landing på bokstavene
-        calm = self.mode == "title" and self.title.calm()
+                    self.title.bounce_letter(self.title.x + 10 * PX, 120)  # landing på bokstavene
+        calm = self.mode == "title" and self.title.is_calm()
         if now - getattr(self, "drawn_at", 0) >= 1 / (CALM_FPS if calm else FPS) - 0.005:
             self.drawn_at = now
             # Flytt den lille tegneflaten dit katten er (potene litt under midten, så det er plass til boblen over)
-            ax, ay = self.anchor()
+            ax, ay = self.paw_position()
             origin = (round(ax - self.BOX / 2), round(ay - self.BOX * 0.62))
             if origin != self.origin:
                 self.origin = origin
@@ -1197,25 +1197,25 @@ class CatRoamer(Gtk.DrawingArea):
             self.queue_draw()
         return True
 
-    def anchor(self):
+    def paw_position(self):
         """Kattens poter i lagets koordinater, uansett modus."""
         if self.mode == "title":
-            x, y, _ = self.title_pose()
+            x, y, _ = self.pose_on_title()
             return x, y
         if self.mode == "frame":
-            x, y, _ = self.frame_pose(self.s)
+            x, y, _ = self.pose_on_frame(self.s)
             return x, y - self.enter
         if self.mode == "playtime":
             return self.pt
         e = min(self.hop["t"], 1)
         (x0, y0, _), (x1, y1, _) = self.hop["from"], self.hop["to"]
-        return x0 + (x1 - x0) * e, y0 + (y1 - y0) * e - math.sin(math.pi * e) * self.hop_lift(y0, y1)
+        return x0 + (x1 - x0) * e, y0 + (y1 - y0) * e - math.sin(math.pi * e) * self.hop_height(y0, y1)
 
     def draw_canvas(self, area, cr, width, height):
         cr.translate(-self.origin[0], -self.origin[1])
-        self.draw(area, cr, self.area_w(), self.area_h())
+        self.draw(area, cr, self.area_width(), self.area_height())
 
-    def hop_lift(self, y0, y1):
+    def hop_height(self, y0, y1):
         """Hvor høyt hoppet går: 40 px, men aldri så høyt at katten forsvinner over toppkanten."""
         return max(0.0, min(40.0, min(y0, y1) - 17 * PX))
 
@@ -1227,7 +1227,7 @@ class CatRoamer(Gtk.DrawingArea):
     def draw(self, area, cr, width, height):
         title = self.title
         if self.mode == "title":
-            tx, ty, _ = self.title_pose()
+            tx, ty, _ = self.pose_on_title()
             ok, p = title.compute_point(self.overlay, Graphene.Point())
             cr.save()
             cr.translate(p.x, p.y)
@@ -1236,7 +1236,7 @@ class CatRoamer(Gtk.DrawingArea):
             return
 
         if self.mode == "frame":
-            x, y, angle = self.frame_pose(self.s)
+            x, y, angle = self.pose_on_frame(self.s)
             y -= self.enter
             sprite = SPRITES["walk"][int(title.t * 6) % 2]
             flip = self.d < 0
@@ -1252,19 +1252,19 @@ class CatRoamer(Gtk.DrawingArea):
             e = min(h["t"], 1)
             (x0, y0, a0), (x1, y1, a1) = h["from"], h["to"]
             x = x0 + (x1 - x0) * e
-            y = y0 + (y1 - y0) * e - math.sin(math.pi * e) * self.hop_lift(y0, y1)
+            y = y0 + (y1 - y0) * e - math.sin(math.pi * e) * self.hop_height(y0, y1)
             angle = a0 if e < 0.5 else a1
             sprite = SPRITES["run"][0]
             flip = x1 < x0
         if (title.t % 4.2) < 0.12:  # blunk
             sprite = [r.replace("e", "b") for r in sprite]
-        sprite = dress(sprite)
+        sprite = add_accessories(sprite)
 
-        sw, sh = size(sprite)
+        sw, sh = sprite_size(sprite)
         cr.save()
         cr.translate(x, y)
         cr.rotate(angle)
-        title.blit(cr, sprite, -sw * PX / 2, -sh * PX + PX, flip)
+        title.draw_sprite(cr, sprite, -sw * PX / 2, -sh * PX + PX, flip)
         cr.restore()
 
         # Boble/hjerte over hodet, alltid rett vei opp
@@ -1272,7 +1272,7 @@ class CatRoamer(Gtk.DrawingArea):
         hy = y - math.cos(angle) * sh * PX * 0.6
         pal = title.palette()
         if title.t < title.speech_until:
-            title.draw_bubble(cr, pal, width, hx, max(30, hy - 8))
+            title.draw_speech_bubble(cr, pal, width, hx, max(30, hy - 8))
         elif title.t < title.happy_until:
             rise = (1 - (title.happy_until - title.t) / 1.6) * 14
-            title.blit(cr, HEART, hx - 5, max(2, hy - 20 - rise))
+            title.draw_sprite(cr, HEART, hx - 5, max(2, hy - 20 - rise))

@@ -16,16 +16,16 @@ gi.require_version("Adw", "1")
 gi.require_version("Graphene", "1.0")
 from gi.repository import Adw, Gdk, Gio, GLib, Graphene, Gtk  # noqa: E402
 
-from cat import CatRoamer, TitleCat  # noqa: E402
-from pomodoro import CSS as POMODORO_CSS, PomodoroPanel  # noqa: E402
-from cat_settings import CatSettings  # noqa: E402
+from cat import CatOverlay, TitleCat  # noqa: E402
+from pomodoro_panel import CSS as POMODORO_CSS, PomodoroPanel  # noqa: E402
+from cat_panel import CatPanel  # noqa: E402
 import cat as catmod  # noqa: E402
-import db  # noqa: E402
+import database as db  # noqa: E402
 import schedule  # noqa: E402
-from onboarding import Onboarding  # noqa: E402
-import updates  # noqa: E402
+from tutorial import Tutorial  # noqa: E402
+import updater  # noqa: E402
 import weather  # noqa: E402
-from i18n import LANG, LANGUAGES, _  # noqa: E402
+from translations import LANG, LANGUAGES, _  # noqa: E402
 
 SAVE_DELAY = 10  # sekunder uten endringer før lagring
 MAIN_H = 600  # vinduet starter alltid i MAIN_W × MAIN_H med sidepanelet lukket
@@ -90,7 +90,7 @@ def palette():
     return PALETTES["dark" if Adw.StyleManager.get_default().get_dark() else "light"]
 
 
-def set_struck(lbl, text, on):
+def set_strikethrough(lbl, text, on):
     """Gjennomstreking settes i selve teksten (ikke via CSS), så den alltid forsvinner igjen når
     avkryssingen fjernes – GTK tegnet ikke alltid om teksten når bare CSS-streken skulle bort."""
     escaped = GLib.markup_escape_text(text)
@@ -104,7 +104,7 @@ def label(text, *classes, wrap=False):
     return lbl
 
 
-class Widget(Adw.ApplicationWindow):
+class MainWindow(Adw.ApplicationWindow):
     def __init__(self, app, cat=None):
         super().__init__(application=app, title="Morning Routine", default_width=MAIN_W, default_height=MAIN_H)
         self.state = {"checks": {}, "plan": "", "meetings": [], "hours": None, "day_off": False, "routine": [], "order": [], "hidden": []}
@@ -198,12 +198,12 @@ class Widget(Adw.ApplicationWindow):
         # Tittelen «good morning» med pixel-katten som lever oppå bokstavene
         self.title_cat = TitleCat(palette, forced=cat)
         body.append(self.title_cat)
-        CatRoamer(self.title_cat, self.overlay)  # legger seg selv i overlay-et
+        CatOverlay(self.title_cat, self.overlay)  # legger seg selv i overlay-et
         self.pomodoro = PomodoroPanel(self.title_cat, palette, on_change=self.on_pomodoro_change)
         self.side_stack.add_named(self.pomodoro, "pomo")
-        self.cat_settings = CatSettings(self.title_cat)
-        self.side_stack.add_named(self.cat_settings, "cat")
-        self.side_stack.add_named(self.build_settings(), "settings")
+        self.cat_panel = CatPanel(self.title_cat)
+        self.side_stack.add_named(self.cat_panel, "cat")
+        self.side_stack.add_named(self.build_settings_page(), "settings")
 
         meta = Gtk.Box(margin_bottom=16)
         left = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)  # dato, og streak på egen linje under
@@ -237,7 +237,7 @@ class Widget(Adw.ApplicationWindow):
             item = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
             item.add_css_class("item")
             row = Gtk.Box(spacing=10)
-            row.append(self.drag_handle(key, item))
+            row.append(self.make_drag_handle(key, item))
             self.titles[key] = label(text, "title", wrap=True)
             row.append(self.titles[key])
             check = Gtk.CheckButton(hexpand=True, halign=Gtk.Align.END)
@@ -325,7 +325,7 @@ class Widget(Adw.ApplicationWindow):
         body.append(self.status)
 
         self.connect("close-request", self.on_close)
-        self.db = db.Worker()
+        self.db_worker = db.DatabaseWorker()
         self.loaded = False  # ingenting lagres før dagens data er lest (ellers kan tom liste overskrive alt)
         self.size_delta = 0  # standardstørrelse minus synlig størrelse (se resize_to_width)
         self.connect("map", lambda *_: GLib.timeout_add(150, self.fix_start_size))
@@ -338,23 +338,23 @@ class Widget(Adw.ApplicationWindow):
         GLib.timeout_add_seconds(2, lambda: self.refresh_weather() and False)
         GLib.timeout_add_seconds(30 * 60, self.refresh_weather)
         # Sjekk veggklokka hvert 30. sekund (en vanlig timer stopper når maskinen sover)
-        GLib.timeout_add_seconds(30, self.check_clock)
+        GLib.timeout_add_seconds(30, self.on_clock_tick)
 
     def apply_schedule(self, sch):
         """Ta i bruk tidene fra ⚙ → schedule i vinduet (lukketid og kattens lunsj)."""
         self.schedule = sch
-        start, end = schedule.parse(sch["lunch"]), schedule.parse(sch["lunch_end"])
+        start, end = schedule.parse_hhmm(sch["lunch"]), schedule.parse_hhmm(sch["lunch_end"])
         catmod.LUNCH = (start.hour * 60 + start.minute, end.hour * 60 + end.minute)
         # Neste lukketid etter at vinduet ble åpnet eller tiden ble endret (har den passert, gjelder den i morgen)
         self.close_at = None
         if sch["close_on"]:
-            self.close_at = datetime.combine(date.today(), schedule.parse(sch["close"]))
+            self.close_at = datetime.combine(date.today(), schedule.parse_hhmm(sch["close"]))
             if datetime.now() >= self.close_at:
                 self.close_at += timedelta(days=1)
 
     # --- streaks og humør ---
     def refresh_streak(self):
-        self.db.submit(db.streak_info, self.day, bool(self.state.get("complete")), callback=self.show_streak)
+        self.db_worker.submit(db.streak_info, self.day, bool(self.state.get("complete")), callback=self.show_streak)
 
     def show_streak(self, info, err):
         if err or not info:
@@ -368,7 +368,7 @@ class Widget(Adw.ApplicationWindow):
         first = not hasattr(self, "streak_seen")  # ved oppstart: ingen feiring for det man allerede har
         catmod.UNLOCKED.clear()
         catmod.UNLOCKED.update(unlocked)
-        self.cat_settings.refresh_wear()
+        self.cat_panel.refresh_wear()
         if not first and new:
             name = next(label for k, _, label in catmod.UNLOCKS if k in new)
             self.title_cat.say(_("unlocked: {name}!").format(name=_(name)), 3)
@@ -376,21 +376,21 @@ class Widget(Adw.ApplicationWindow):
             self.title_cat.say(_("{n} days in a row!").format(n=n), 3)
         self.streak_seen = n
 
-    def mood(self):
+    def react_to_progress(self):
         """Katten reagerer på hvordan dagen går (sjekkes hvert 30. sekund)."""
         if not self.loaded or self.pomodoro.running() or random.random() > 0.12:
             return
         now = datetime.now()
-        keys = self.order()
+        keys = self.item_order()
         done = sum(bool(self.state["checks"].get(k)) for k in keys)
         if done == 0 and now.hour >= 10:
             self.title_cat.say(_(random.choice(["meow?", "*stares at list*", "mrrp?"])), 2)
         elif keys and done == len(keys):
             self.title_cat.say("", 0)  # bare et hjerte: fornøyd katt
 
-    def check_clock(self):
+    def on_clock_tick(self):
         self.check_new_day()
-        self.mood()
+        self.react_to_progress()
         self.check_for_update()
         if self.close_at is None or datetime.now() < self.close_at:
             return True
@@ -406,7 +406,7 @@ class Widget(Adw.ApplicationWindow):
         if date.today() == self.day or getattr(self, "changing_day", False):
             return
 
-        def go():
+        def switch_day():
             self.changing_day = False
             self.day = date.today()
             self.load()
@@ -417,9 +417,9 @@ class Widget(Adw.ApplicationWindow):
         if self.loaded:
             self.changing_day = True
             self.hours.update()
-            self.save_now(then=go, failed=retry)
+            self.save_now(then=switch_day, failed=retry)
         else:
-            go()
+            switch_day()
 
     def on_close(self, _):
         # Lagre før vinduet lukkes og vent på databasen (maks 10 s), også om en lagring allerede er i gang.
@@ -430,13 +430,13 @@ class Widget(Adw.ApplicationWindow):
                 GLib.source_remove(self.save_id)
                 self.save_id = 0
             try:
-                self.db.run_sync(db.save_day, self.day, self.snapshot())
+                self.db_worker.run_sync(db.save_day, self.day, self.state_copy())
             except Exception:
                 pass
         return False
 
-    # --- data (all databasetilgang går via self.db, en bakgrunnstråd) ---
-    def snapshot(self):
+    # --- data (all databasetilgang går via self.db_worker, en bakgrunnstråd) ---
+    def state_copy(self):
         return json.loads(json.dumps(self.state))  # kopi, så tråden ikke leser en liste som endres
 
     def set_status(self, ok, text):
@@ -452,7 +452,7 @@ class Widget(Adw.ApplicationWindow):
         self.date_lbl.set_label(f"{_(DAYS[d.weekday()])} {d.day}{'.' if LANG == 'nb' else ''} {_(MONTHS[d.month - 1])}")
         self.set_status(True, "○ loading…")
         self.scroll.set_sensitive(False)  # det som skrives nå, ville blitt erstattet når dataene kommer
-        self.db.submit(db.load_day, d, callback=lambda result, err: self.on_loaded(d, result, err))
+        self.db_worker.submit(db.load_day, d, callback=lambda result, err: self.on_loaded(d, result, err))
 
     def on_loaded(self, day, result, err):
         if day != self.day:
@@ -480,7 +480,7 @@ class Widget(Adw.ApplicationWindow):
         self.scroll.set_sensitive(True)
         self.set_status(True, "● saved")
         self.update_progress()
-        self.update_hours()
+        self.refresh_overtime()
         self.refresh_streak()
 
     def save(self):
@@ -508,41 +508,41 @@ class Widget(Adw.ApplicationWindow):
                 return
             if day == self.day:
                 self.set_status(True, "● saved")
-                self.update_hours()
+                self.refresh_overtime()
                 self.refresh_streak()
             if then:
                 then()
 
-        self.db.submit(db.save_day, day, self.snapshot(), callback=done)
+        self.db_worker.submit(db.save_day, day, self.state_copy(), callback=done)
         return False
 
     # --- UI ---
     def update_progress(self):
-        keys = self.order()
+        keys = self.item_order()
         done = sum(bool(self.state["checks"].get(k)) for k in keys)
         total = len(keys)
         self.blocks.set_markup("■" * done + f'<span foreground="{palette()["line"]}">{"■" * (total - done)}</span>')
         self.footer.set_label(_("[ all done – have a great day ]") if done == total else f"{done}/{total}")
         # Hele listen ferdig akkurat nå (ikke når den lastes inn ferdig)
         if done == total and not getattr(self, "all_done", True) and not self.loading:
-            self.title_cat.react("all_done", 3)
+            self.title_cat.react_to("all_done", 3)
         self.all_done = done == total
         self.state["complete"] = total > 0 and done == total  # lagres per dag, brukes til streaks
         for key, (item, check, extra) in self.items.items():
             on = check.get_active()
             (item.add_css_class if on else item.remove_css_class)("done")
-            set_struck(self.titles[key], _(dict((k, t) for k, t, _d in ITEMS)[key]), on)
+            set_strikethrough(self.titles[key], _(dict((k, t) for k, t, _d in ITEMS)[key]), on)
             extra.set_visible(not on)
 
-    def update_hours(self):
-        self.db.submit(db.summary, self.day, callback=self.show_hours)
+    def refresh_overtime(self):
+        self.db_worker.submit(db.overtime_summary, self.day, callback=self.show_overtime)
 
-    def show_hours(self, sm, err):
+    def show_overtime(self, sm, err):
         if sm and not err:
             self.last_summary = sm
         fmt = lambda h: f"{h:+.2f} {_('h')}"
         h = self.state.get("hours")
-        expected = db.expected_for(self.day, self.state.get("day_off"))
+        expected = db.expected_hours_for(self.day, self.state.get("day_off"))
         if h is None:
             self.today_diff.set_label(_("not logged yet · expected {h} h").format(h=f"{expected:g}"))
         else:
@@ -569,7 +569,7 @@ class Widget(Adw.ApplicationWindow):
         if self.loading:
             return
         self.state["day_off"] = check.get_active()
-        self.show_hours(None, None)
+        self.show_overtime(None, None)
         self.save()
 
     def on_hours_changed(self, spin):
@@ -577,11 +577,11 @@ class Widget(Adw.ApplicationWindow):
             return
         self.state["hours"] = spin.get_value()
         self.hours_box.remove_css_class("attention")
-        self.show_hours(None, None)
+        self.show_overtime(None, None)
         self.save()
 
     # --- rekkefølge og dra-og-slipp ---
-    def order(self):
+    def item_order(self):
         """Alle punktnøklene i visningsrekkefølge; nye punkter havner nederst."""
         keys = [k for k in self.items if k not in self.state["hidden"]] + [f"r:{r['id']}" for r in self.state["routine"]]
         saved = [k for k in self.state["order"] if k in keys]
@@ -590,13 +590,13 @@ class Widget(Adw.ApplicationWindow):
     def render_list(self):
         while child := self.list_box.get_first_child():
             self.list_box.remove(child)
-        for n, key in enumerate(self.order(), 1):
+        for n, key in enumerate(self.item_order(), 1):
             widget = self.items[key][0] if key in self.items else self.routine_widgets[key]
             self.list_box.append(widget)
             self.nums[key].set_label(f"{n:02d}")
         self.render_settings()
 
-    def drag_handle(self, key, item):
+    def make_drag_handle(self, key, item):
         """Nummeret («01») er håndtaket du drar punktet etter."""
         num = label("", "num", "handle")
         num.set_cursor_from_name("grab")
@@ -635,7 +635,7 @@ class Widget(Adw.ApplicationWindow):
         item.add_controller(target)
 
     def move_item(self, dragged, target, after):
-        order = self.order()
+        order = self.item_order()
         if dragged == target or dragged not in order or target not in order:
             return  # f.eks. tekst dratt inn fra et tekstfelt
         order.remove(dragged)
@@ -654,9 +654,9 @@ class Widget(Adw.ApplicationWindow):
             if done:
                 item.add_css_class("done")
             row = Gtk.Box(spacing=10)
-            row.append(self.drag_handle(key, item))
+            row.append(self.make_drag_handle(key, item))
             title = label(r["text"], "title", wrap=True)
-            set_struck(title, r["text"], done)
+            set_strikethrough(title, r["text"], done)
             title.set_hexpand(True)
             row.append(title)
             check = Gtk.CheckButton(active=done)
@@ -678,13 +678,13 @@ class Widget(Adw.ApplicationWindow):
         self.save()
 
     # --- settings: slette og gjenopprette punkter ---
-    def build_settings(self):
+    def build_settings_page(self):
         page = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
         head = Gtk.Box()
         head.append(label("settings", "big"))
         tutorial = Gtk.Button(label=_("show tutorial"), hexpand=True, halign=Gtk.Align.END)
         tutorial.add_css_class("flat")
-        tutorial.connect("clicked", lambda _: self.show_onboarding())
+        tutorial.connect("clicked", lambda _: self.show_tutorial())
         head.append(tutorial)
         page.append(head)
         heading = label("todos", "num")
@@ -700,7 +700,7 @@ class Widget(Adw.ApplicationWindow):
         page.append(self.deleted_list)
 
         # Timer for en annen dag (glemt å føre, eller må rette)
-        page.append(self.build_schedule())
+        page.append(self.build_schedule_settings())
 
         heading = label("hours for another day", "num")
         heading.set_margin_top(14)
@@ -756,7 +756,7 @@ class Widget(Adw.ApplicationWindow):
         heading = label("updates", "num")
         heading.set_margin_top(14)
         page.append(heading)
-        version = updates.installed_version()
+        version = updater.installed_version()
         where = _("installed as Flatpak") if db.IN_FLATPAK else _("running from source")
         page.append(label(_("version {version}").format(version=version) if version else where, "detail", "muted"))
         self.check_updates = Gtk.CheckButton(label=_("check for new versions"), active=db.load_config().get("check_updates", True))
@@ -791,13 +791,13 @@ class Widget(Adw.ApplicationWindow):
     def on_export_backup(self, _widget):
         def chosen(path):
             self.backup_status.set_label(_("saving backup…"))
-            self.db.submit(db.export_backup, path, callback=lambda r, e: self.backup_status.set_label(
+            self.db_worker.submit(db.export_backup, path, callback=lambda r, e: self.backup_status.set_label(
                 _("could not save – {err}").format(err=e) if e else _("backup saved: {path}").format(path=path)))
         self.choose_file(_("Save backup"), f"morning-routine-backup-{date.today()}.zip", chosen)
 
     def on_export_csv(self, _widget):
         def chosen(path):
-            self.db.submit(db.export_hours_csv, path, callback=lambda n, e: self.backup_status.set_label(
+            self.db_worker.submit(db.export_hours_csv, path, callback=lambda n, e: self.backup_status.set_label(
                 _("could not save – {err}").format(err=e) if e else _("{n} days of hours saved: {path}").format(n=n, path=path)))
         self.choose_file(_("Save hours"), f"hours-{date.today()}.csv", chosen)
 
@@ -827,7 +827,7 @@ class Widget(Adw.ApplicationWindow):
                 return
             self.restart()  # innstillinger (katt, tema, tider) leses ved oppstart
 
-        self.db.submit(db.restore_backup, path, callback=done)
+        self.db_worker.submit(db.restore_backup, path, callback=done)
 
     def restart(self):
         """Start appen på nytt (etter gjenoppretting eller oppdatering)."""
@@ -849,8 +849,7 @@ class Widget(Adw.ApplicationWindow):
             self.show_weather(w)
             self.weather_remark(w)
 
-        threading.Thread(target=lambda: self.fetch(lambda: weather.fetch(place["lat"], place["lon"]), done),
-                         daemon=True).start()
+        self.run_in_thread(lambda: weather.fetch_forecast(place["lat"], place["lon"]), done)
         return True
 
     def show_weather(self, w):
@@ -867,14 +866,14 @@ class Widget(Adw.ApplicationWindow):
     def draw_weather_icon(self, area, cr, width, height):
         if not getattr(self, "weather", None):
             return
-        icon = catmod.outline(weather.ICONS[self.weather["kind"]])
+        icon = catmod.add_outline(weather.ICONS[self.weather["kind"]])
         px = 2
         ox = (width - len(icon[0]) * px) // 2
         oy = (height - len(icon) * px) // 2
         for r, row in enumerate(icon):
             for c, ch in enumerate(row):
                 if ch != ".":
-                    cr.set_source_rgb(*catmod.rgb(weather.COLORS[ch]))
+                    cr.set_source_rgb(*catmod.hex_to_rgb(weather.COLORS[ch]))
                     cr.rectangle(ox + c * px, oy + r * px, px, px)
                     cr.fill()
 
@@ -884,7 +883,7 @@ class Widget(Adw.ApplicationWindow):
         if not 5 <= datetime.now().hour < 12 or db.load_config().get("weather_remark") == today:
             return
         db.update_config(weather_remark=today)
-        if text := weather.remark(w):
+        if text := weather.cat_remark(w):
             self.title_cat.say(_(text), 4)
 
     def build_weather_settings(self, page):
@@ -939,7 +938,7 @@ class Widget(Adw.ApplicationWindow):
                 self.place_results.append(off)
 
         lang = "nb" if LANG == "nb" else "en"
-        threading.Thread(target=lambda: self.fetch(lambda: weather.search(query, lang), done), daemon=True).start()
+        self.run_in_thread(lambda: weather.search(query, lang), done)
 
     def choose_place(self, place):
         db.update_config(weather_place=place, weather_cache=None)
@@ -968,16 +967,20 @@ class Widget(Adw.ApplicationWindow):
             self.update_btn.set_label(_("update"))
             self.update_bar.set_reveal_child(True)
 
-        threading.Thread(target=lambda: self.fetch(updates.newer_available, done), daemon=True).start()
+        self.run_in_thread(updater.check_for_newer_version, done)
         return False
 
-    def fetch(self, fn, callback):
-        """Kjør fn på en egen tråd (nettverk skal ikke holde opp databasekøen) og svar på GTK-tråden."""
-        try:
-            result, err = fn(), None
-        except Exception as e:  # noqa: BLE001
-            result, err = None, e
-        GLib.idle_add(lambda: callback(result, err) and False)
+    def run_in_thread(self, fn, callback):
+        """Run fn on its own thread (network calls must not hold up the database queue);
+        callback(result, error) is called on the GTK thread."""
+        def work():
+            try:
+                result, err = fn(), None
+            except Exception as e:  # noqa: BLE001
+                result, err = None, e
+            GLib.idle_add(lambda: callback(result, err) and False)
+
+        threading.Thread(target=work, daemon=True).start()
 
     def on_update_clicked(self, btn):
         if btn.get_label() == _("restart"):
@@ -991,9 +994,9 @@ class Widget(Adw.ApplicationWindow):
                 self.update_lbl.set_label(_("Download failed – {err}").format(err=err))
                 btn.set_sensitive(True)
                 return
-            cmd = updates.install_command(path)
+            cmd = updater.install_command(path)
             if not cmd:
-                self.update_lbl.set_label(_("Run this in a terminal to update:\n{cmd}").format(cmd=updates.INSTALL_COMMAND))
+                self.update_lbl.set_label(_("Run this in a terminal to update:\n{cmd}").format(cmd=updater.INSTALL_COMMAND))
                 return
             self.update_lbl.set_label(_("Installing – enter your password in the dialog…"))
             proc = Gio.Subprocess.new(cmd, Gio.SubprocessFlags.NONE)
@@ -1008,15 +1011,15 @@ class Widget(Adw.ApplicationWindow):
                     btn.set_label(_("restart"))
                 else:
                     self.update_lbl.set_label(_("Not updated (cancelled or failed). Try again, or run:\n{cmd}").format(
-                        cmd=updates.INSTALL_COMMAND))
+                        cmd=updater.INSTALL_COMMAND))
                     btn.set_label(_("update"))
                 btn.set_sensitive(True)
 
             proc.wait_check_async(None, finished)
 
-        threading.Thread(target=lambda: self.fetch(updates.download, downloaded), daemon=True).start()
+        self.run_in_thread(updater.download_latest_package, downloaded)
 
-    def build_schedule(self):
+    def build_schedule_settings(self):
         """⚙ → schedule: når listen åpnes, påminnelser, lukketid, lunsj og ukedager."""
         box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
         heading = label("schedule", "num")
@@ -1027,7 +1030,7 @@ class Widget(Adw.ApplicationWindow):
         self.day_btns = {}  # påminnelse -> sju ukedagsknapper
 
         def time_picker(key):
-            t = schedule.parse(sch[key])
+            t = schedule.parse_hhmm(sch[key])
             hh = Gtk.SpinButton.new_with_range(0, 23, 1)
             mm = Gtk.SpinButton.new_with_range(0, 59, 5)
             for spin, value in ((hh, t.hour), (mm, t.minute)):
@@ -1088,26 +1091,26 @@ class Widget(Adw.ApplicationWindow):
         return box
 
     # --- første oppstart ---
-    def show_onboarding(self):
+    def show_tutorial(self):
         opening = getattr(self, "last_summary", {}).get("opening_balance", 0.0)
-        self.onboarding = Onboarding(self, palette, self.on_onboarding_done, opening=opening)
-        self.onboarding.present()
+        self.tutorial = Tutorial(self, palette, self.on_tutorial_done, opening=opening)
+        self.tutorial.present()
 
-    def on_onboarding_done(self, opening, sch, problems):
+    def on_tutorial_done(self, opening, sch, problems):
         if opening is not None:
-            self.db.submit(db.set_opening_balance, opening, callback=lambda *_: self.update_hours())
+            self.db_worker.submit(db.set_opening_balance, opening, callback=lambda *_: self.refresh_overtime())
         else:
-            self.update_hours()
+            self.refresh_overtime()
         self.apply_schedule(sch)
 
         def timers_done(_, err):
             if err:
                 self.set_status(False, f"● reminders could not be set – {err}")
 
-        self.db.submit(schedule.apply_timers, sch, callback=timers_done)
+        self.db_worker.submit(schedule.apply_reminders, sch, callback=timers_done)
         # Oppdater schedule-feltene på ⚙-siden med det som ble valgt
         for key, (on, hh, mm) in self.sched_widgets.items():
-            t = schedule.parse(sch[key])
+            t = schedule.parse_hhmm(sch[key])
             hh.set_value(t.hour)
             mm.set_value(t.minute)
             if on is not None:
@@ -1145,14 +1148,14 @@ class Widget(Adw.ApplicationWindow):
                 open=nxt(runs["morning"]), reminder=nxt(runs["hours"]), close=close))
 
         # systemctl kjøres i bakgrunnstråden, så vinduet ikke henger om systemd svarer tregt
-        self.db.submit(schedule.apply_timers, sch, callback=done)
+        self.db_worker.submit(schedule.apply_reminders, sch, callback=done)
 
-    def past_day(self):
+    def selected_past_day(self):
         d = self.past_cal.get_date()
         return date(d.get_year(), d.get_month(), d.get_day_of_month())
 
     def on_past_day_selected(self, cal):
-        day = self.past_day()
+        day = self.selected_past_day()
         self.past_save_btn.set_sensitive(False)  # låst til dagens verdier er hentet, så de ikke lagres på feil dag
         if day == self.day:
             self.past_status.set_label(_("Today: use the hours field in the list."))
@@ -1160,20 +1163,20 @@ class Widget(Adw.ApplicationWindow):
         self.past_status.set_label(_("loading…"))
 
         def show(result, err):
-            if err or day != self.past_day():
+            if err or day != self.selected_past_day():
                 self.past_status.set_label(_("could not read – {err}").format(err=err) if err else "")
                 return
             self.past_hours.set_value(result["hours"] or 0)
             self.past_off.set_active(result["day_off"])
             logged = _("not logged") if result["hours"] is None else _("logged {h} h").format(h=f"{result['hours']:g}")
             self.past_status.set_label(_("{day}: {logged} · expected {h} h").format(
-                day=f"{day:%a %d %b}", logged=logged, h=f"{db.expected_for(day, result['day_off']):g}"))
+                day=f"{day:%a %d %b}", logged=logged, h=f"{db.expected_hours_for(day, result['day_off']):g}"))
             self.past_save_btn.set_sensitive(True)
 
-        self.db.submit(db.get_hours, day, callback=show)
+        self.db_worker.submit(db.get_logged_hours, day, callback=show)
 
     def on_past_save(self, _widget):
-        day = self.past_day()
+        day = self.selected_past_day()
         if day == self.day:
             return
         hours, off = self.past_hours.get_value(), self.past_off.get_active()
@@ -1181,9 +1184,9 @@ class Widget(Adw.ApplicationWindow):
         def done(_result, err):
             self.past_status.set_label(_("not saved – {err}").format(err=err) if err
                                        else _("saved {h} h for {day}").format(h=f"{hours:g}", day=f"{day:%a %d %b}"))
-            self.update_hours()
+            self.refresh_overtime()
 
-        self.db.submit(db.set_hours, day, hours, off, callback=done)
+        self.db_worker.submit(db.set_logged_hours, day, hours, off, callback=done)
 
     def item_title(self, key):
         if key in self.items:
@@ -1194,7 +1197,7 @@ class Widget(Adw.ApplicationWindow):
         for box in (self.settings_list, self.deleted_list):
             while child := box.get_first_child():
                 box.remove(child)
-        for n, key in enumerate(self.order(), 1):
+        for n, key in enumerate(self.item_order(), 1):
             row = Gtk.Box(spacing=10)
             row.add_css_class("setrow")
             row.append(label(f"{n:02d}", "num"))
@@ -1243,20 +1246,20 @@ class Widget(Adw.ApplicationWindow):
         self.update_progress()
         self.save()
 
-    def cheer(self, check):
+    def react_to_check(self, check):
         """Katten sier sin «check»-replikk når noe krysses av (ikke når listen lastes inn)."""
         if check.get_active() and not self.loading:
-            self.title_cat.react("check")
+            self.title_cat.react_to("check")
 
     def on_todo_toggled(self, check, key):
-        self.cheer(check)
+        self.react_to_check(check)
         self.state["checks"][key] = check.get_active()
         self.render_routine()
         self.update_progress()
         self.save()
 
     def on_item_toggled(self, check, key):
-        self.cheer(check)
+        self.react_to_check(check)
         self.state["checks"][key] = check.get_active()
         self.update_progress()
         self.save()
@@ -1278,7 +1281,7 @@ class Widget(Adw.ApplicationWindow):
         for text in items:
             cb = Gtk.CheckButton(label=text, active=bool(self.state["checks"].get(f"p:{text}")))
             cb.get_last_child().set_wrap(True)
-            set_struck(cb.get_last_child(), text, cb.get_active())
+            set_strikethrough(cb.get_last_child(), text, cb.get_active())
             cb.connect("toggled", self.on_plan_item_toggled, text)
             self.plan_list.append(cb)
         done = sum(bool(self.state["checks"].get(f"p:{t}")) for t in items)
@@ -1286,14 +1289,14 @@ class Widget(Adw.ApplicationWindow):
         self.plan_hint.set_visible(not items)
 
     def on_plan_item_toggled(self, cb, text):
-        self.cheer(cb)
+        self.react_to_check(cb)
         self.state["checks"][f"p:{text}"] = cb.get_active()
         self.render_plan_items()
         self.save()
 
     def on_pomodoro_change(self, pomo):
         # Tiden vises på knappen mens klokka går, så du ser den selv når panelet er lukket
-        self.pomo_btn.set_label(f"pomo {pomo.clock()}" if pomo.running() else "pomo")
+        self.pomo_btn.set_label(f"pomo {pomo.clock_text()}" if pomo.running() else "pomo")
 
     def side_buttons(self):
         return {"plan": self.side_btn, "pomo": self.pomo_btn, "cat": self.cat_btn, "settings": self.settings_btn}
@@ -1313,7 +1316,7 @@ class Widget(Adw.ApplicationWindow):
         self.side_btn.set_label(_("plan ◂") if self.side_btn.get_active() else _("plan ▸"))
         if btn.get_active() and others:
             return
-        self.show_side(btn.get_active())
+        self.animate_side_panel(btn.get_active())
 
     def fix_start_size(self):
         """Første gang vinduet vises: sørg for at den synlige størrelsen blir MAIN_W × MAIN_H også der
@@ -1331,7 +1334,7 @@ class Widget(Adw.ApplicationWindow):
         dw, dh = self.get_default_size()
         self.set_default_size(round(width) + self.size_delta, dh)
 
-    def show_side(self, opening):
+    def animate_side_panel(self, opening):
         # Åpne: vinduet vokser mot høyre. Lukke: vinduet krymper fra høyre mot venstre.
         self.side_anim.pause()
         if self.get_mapped() and self.side_anim.get_state() != Adw.AnimationState.PLAYING:
@@ -1379,7 +1382,7 @@ class Widget(Adw.ApplicationWindow):
             box.append(head)
             for j, p in enumerate(PREP):
                 cb = Gtk.CheckButton(label=_(p), active=j < len(m["done"]) and bool(m["done"][j]))
-                set_struck(cb.get_last_child(), _(p), cb.get_active())
+                set_strikethrough(cb.get_last_child(), _(p), cb.get_active())
                 cb.connect("toggled", self.on_prep_toggled, m, j)
                 box.append(cb)
             self.meeting_box.append(box)
@@ -1390,8 +1393,8 @@ class Widget(Adw.ApplicationWindow):
         self.save()
 
     def on_prep_toggled(self, cb, m, j):
-        set_struck(cb.get_last_child(), _(PREP[j]), cb.get_active())
-        self.cheer(cb)
+        set_strikethrough(cb.get_last_child(), _(PREP[j]), cb.get_active())
+        self.react_to_check(cb)
         m["done"] += [False] * (j + 1 - len(m["done"]))
         m["done"][j] = cb.get_active()
         self.save()
@@ -1409,8 +1412,8 @@ class App(Adw.Application):
             if not getattr(self, "held", False):
                 self.hold()
                 self.held = True
-                GLib.timeout_add_seconds(30, self.scheduler_tick)
-                GLib.timeout_add_seconds(3, lambda: self.scheduler_tick() and False)
+                GLib.timeout_add_seconds(30, self.fire_due_reminders)
+                GLib.timeout_add_seconds(3, lambda: self.fire_due_reminders() and False)
             if "--background" in args:
                 return 0  # startet ved innlogging: bare vent på klokka
         cat = next((a.split("=", 1)[1] for a in args if a.startswith("--cat=")), None)
@@ -1429,7 +1432,7 @@ class App(Adw.Application):
                 Gtk.StyleContext.add_provider_for_display(display, css, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION + 1)
                 Adw.StyleManager.get_default().connect("notify::dark", lambda *_: self.apply_colors())
             # --cat=<navn> tvinger en bestemt katteanimasjon (for testing)
-            win = self.win = Widget(self, cat)
+            win = self.window = MainWindow(self, cat)
             win.connect("destroy", lambda *_: setattr(self, "win", None))  # i bakgrunnen kan et nytt vindu åpnes senere
             try:
                 theme = THEME_FILE.read_text().strip()
@@ -1437,14 +1440,14 @@ class App(Adw.Application):
                 theme = "system"
             self.set_theme(theme)
             if not db.load_config().get("onboarded"):
-                GLib.timeout_add(600, lambda: win.show_onboarding() and False)  # første gang: velkomst
+                GLib.timeout_add(600, lambda: win.show_tutorial() and False)  # første gang: velkomst
         else:
             win.check_new_day()  # f.eks. 08:00-timeren henter fram et vindu som har stått åpent siden i går
         win.present()
         if hours:
             win.focus_hours()
 
-    def scheduler_tick(self, now=None):
+    def fire_due_reminders(self, now=None):
         """Flatpak: åpne listen og minn om timer til tidene under ⚙ → schedule (som systemd-timerne ellers gjør).
         Morgenlisten åpnes også om maskinen var av på tidspunktet; timepåminnelsen bare innen 30 min."""
         now = now or datetime.now()
@@ -1455,7 +1458,7 @@ class App(Adw.Application):
         for key in ("morning", "hours"):
             if not sch[f"{key}_on"] or now.weekday() not in sch[f"{key}_days"] or fired.get(key) == str(now.date()):
                 continue
-            at = datetime.combine(now.date(), schedule.parse(sch[key]))
+            at = datetime.combine(now.date(), schedule.parse_hhmm(sch[key]))
             if now < at:
                 continue
             fired[key] = str(now.date())

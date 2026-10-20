@@ -10,7 +10,7 @@ gi.require_version("Gtk", "4.0")
 from gi.repository import Gdk, Gtk  # noqa: E402
 
 import cat
-from i18n import _
+from translations import _
 
 
 def label(text, *classes):
@@ -30,7 +30,7 @@ def to_hex(rgba):
     return "#{:02x}{:02x}{:02x}".format(*(round(c * 255) for c in (rgba.red, rgba.green, rgba.blue)))
 
 
-class CatSettings(Gtk.Box):
+class CatPanel(Gtk.Box):
     def __init__(self, title_cat):
         super().__init__(orientation=Gtk.Orientation.VERTICAL, spacing=6)
         self.title_cat = title_cat
@@ -93,9 +93,9 @@ class CatSettings(Gtk.Box):
             self.append(entry)
             self.phrase_entries[key] = entry
 
-        self.load_into_ui()
+        self.show_current_settings()
 
-    def load_into_ui(self):
+    def show_current_settings(self):
         self.updating = True
         names = list(cat.BREEDS)
         breed = cat.SETTINGS["breed"]
@@ -120,9 +120,9 @@ class CatSettings(Gtk.Box):
         if self.updating:
             return
         cat.SETTINGS.setdefault("wear", {})[key] = cb.get_active()
-        self.changed()
+        self.save_and_redraw()
 
-    def changed(self):
+    def save_and_redraw(self):
         cat.save_cat_settings()
         self.title_cat.queue_draw()
 
@@ -136,9 +136,9 @@ class CatSettings(Gtk.Box):
         cat.SETTINGS["breed"] = names[i]
         cat.COLORS.update(cat.BREEDS[names[i]])
         cat.set_shape(cat.BREED_SHAPES.get(names[i], "normal"))
-        self.load_into_ui()
+        self.show_current_settings()
         self.title_cat.say(_("{breed}!").format(breed=_(names[i])))  # liten bekreftelse fra katten
-        self.changed()
+        self.save_and_redraw()
 
     def on_color(self, btn, _, key):
         if self.updating:
@@ -149,18 +149,18 @@ class CatSettings(Gtk.Box):
             self.updating = True
             self.breed.set_selected(len(cat.BREEDS))
             self.updating = False
-        self.changed()
+        self.save_and_redraw()
 
     def on_phrase(self, entry, key):
         if self.updating:
             return
         cat.PHRASES[key] = entry.get_text()
-        self.changed()
+        self.save_and_redraw()
 
     def on_reset(self, _):
         cat.SETTINGS["breed"] = "orange tabby"
         cat.COLORS.update(cat.BREEDS["orange tabby"])
         cat.set_shape("normal")
         cat.PHRASES.update(cat.DEFAULT_PHRASES)
-        self.load_into_ui()
-        self.changed()
+        self.show_current_settings()
+        self.save_and_redraw()

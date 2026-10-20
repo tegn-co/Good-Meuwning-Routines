@@ -7,7 +7,7 @@ import schedule
 class ScheduleTest(unittest.TestCase):
     def test_full_timer_without_package(self):
         sch = dict(schedule.DEFAULTS, morning="08:07", hours_days=[0, 2])
-        schedule.apply_timers(sch)
+        schedule.apply_reminders(sch)
         text = (schedule.TIMER_DIR / "morgen-todo-hours.timer").read_text()
         self.assertIn("OnCalendar=Mon,Wed 15:00", text)
         self.assertIn("OnCalendar=Mon,Tue,Wed,Thu,Fri 08:07", (schedule.TIMER_DIR / "morgen-todo.timer").read_text())
@@ -20,7 +20,7 @@ class ScheduleTest(unittest.TestCase):
         schedule.TIMER_DIR.mkdir(parents=True, exist_ok=True)
         (schedule.TIMER_DIR / "morgen-todo.timer").write_text("[Unit]\nDescription=Morgen-todo: old\n")
         try:
-            schedule.apply_timers(dict(schedule.DEFAULTS))
+            schedule.apply_reminders(dict(schedule.DEFAULTS))
             self.assertFalse((schedule.TIMER_DIR / "morgen-todo.timer").exists())
             conf = (schedule.TIMER_DIR / "morgen-todo.timer.d" / "schedule.conf").read_text()
             self.assertEqual(conf, "[Timer]\nOnCalendar=\nOnCalendar=Mon,Tue,Wed,Thu,Fri 08:00\n")
@@ -30,7 +30,7 @@ class ScheduleTest(unittest.TestCase):
 
     def test_disabled_without_days(self):
         env.SYSTEMCTL_CALLS.clear()
-        schedule.apply_timers(dict(schedule.DEFAULTS, hours_days=[]))
+        schedule.apply_reminders(dict(schedule.DEFAULTS, hours_days=[]))
         self.assertIn(("disable", "--now", "morgen-todo-hours.timer"), env.SYSTEMCTL_CALLS)
 
     def test_old_shared_days_migrate(self):
@@ -44,14 +44,14 @@ if __name__ == "__main__":
 
 
 class FlatpakSchedulerTest(unittest.TestCase):
-    """Som Flatpak åpner appen selv listen og minner om timer (App.scheduler_tick)."""
+    """Som Flatpak åpner appen selv listen og minner om timer (App.fire_due_reminders)."""
 
     def run_tick(self, now, fired=None):
-        import db
+        import database as db
         from datetime import datetime  # noqa: F401
         db.update_config(fired=fired or {})
         schedule.save(dict(schedule.DEFAULTS))
-        import widget
+        import app
         calls = []
 
         class FakeApp:
@@ -61,7 +61,7 @@ class FlatpakSchedulerTest(unittest.TestCase):
             def open_window(self, hours=False, cat=None):
                 calls.append(("open", hours))
 
-        widget.App.scheduler_tick(FakeApp(), now)
+        app.App.fire_due_reminders(FakeApp(), now)
         return calls
 
     def test_morning_fires_once_also_when_late(self):
@@ -82,5 +82,5 @@ class FlatpakSchedulerTest(unittest.TestCase):
     def test_next_time(self):
         from datetime import datetime
         sch = dict(schedule.DEFAULTS)
-        self.assertEqual(schedule.next_time(sch, "morning", datetime(2026, 10, 23, 9, 0)), "Mon 2026-10-26 08:00:00")
-        self.assertEqual(schedule.next_time(dict(sch, hours_on=False), "hours"), "off")
+        self.assertEqual(schedule.next_reminder_time(sch, "morning", datetime(2026, 10, 23, 9, 0)), "Mon 2026-10-26 08:00:00")
+        self.assertEqual(schedule.next_reminder_time(dict(sch, hours_on=False), "hours"), "off")

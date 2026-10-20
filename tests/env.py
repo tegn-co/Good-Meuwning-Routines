@@ -24,6 +24,6 @@ schedule.TIMER_DIR = TMP / "systemd"
 schedule.PACKAGED_DIR = TMP / "packaged-units"
 schedule.systemctl = lambda *args: (SYSTEMCTL_CALLS.append(args), "Wed 2026-10-21 08:00:00 CEST" if "show" in args else "")[1]
 
-import db  # noqa: E402
+import database as db  # noqa: E402
 
 assert str(db.DB_PATH).startswith(str(TMP)), "testene må aldri bruke den ekte databasen"

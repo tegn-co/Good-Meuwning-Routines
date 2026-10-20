@@ -33,7 +33,7 @@ ICONS = {
 COLORS = {"y": "#ffc93c", "g": "#c9ccd3", "u": "#5aa9e6", "W": "#ffffff", "m": "#e8e0b0", "o": "#2b2b33"}
 
 
-def kind(code, is_day=True):
+def weather_kind(code, is_day=True):
     for codes, name in KINDS:
         if code in codes:
             return "night" if name == "clear" and not is_day else name
@@ -53,28 +53,28 @@ def search(name, language="en"):
              "lat": r["latitude"], "lon": r["longitude"]} for r in data.get("results", [])]
 
 
-def parse(data):
+def parse_forecast(data):
     cur, day = data["current"], data["daily"]
     return {
         "temp": round(cur["temperature_2m"]),
-        "kind": kind(cur["weather_code"], bool(cur.get("is_day", 1))),
-        "day_kind": kind(day["weather_code"][0]),
+        "kind": weather_kind(cur["weather_code"], bool(cur.get("is_day", 1))),
+        "day_kind": weather_kind(day["weather_code"][0]),
         "min": round(day["temperature_2m_min"][0]),
         "max": round(day["temperature_2m_max"][0]),
         "rain": day.get("precipitation_probability_max", [None])[0],
     }
 
 
-def fetch(lat, lon):
+def fetch_forecast(lat, lon):
     """Været nå og for i dag."""
-    return parse(_get(FORECAST, {
+    return parse_forecast(_get(FORECAST, {
         "latitude": lat, "longitude": lon, "timezone": "auto", "forecast_days": 1,
         "current": "temperature_2m,weather_code,is_day",
         "daily": "weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max",
     }))
 
 
-def remark(w):
+def cat_remark(w):
     """Hva katten sier om dagens vær om morgenen (engelsk nøkkel, oversettes av vinduet), eller None."""
     if w["day_kind"] in ("rain", "drizzle", "thunder") and (w["rain"] or 0) >= 50:
         return "take an umbrella! ☔"

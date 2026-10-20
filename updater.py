@@ -26,7 +26,7 @@ def installed_version():
         return None  # kjører fra kildekoden
 
 
-def parse(version):
+def parse_version(version):
     return tuple(int(p) for p in version.lstrip("v").split(".") if p.isdigit())
 
 
@@ -38,16 +38,16 @@ def latest_version():
         return json.loads(r.read())["tag_name"].lstrip("v")
 
 
-def newer_available():
+def check_for_newer_version():
     """(installert, nyeste) hvis det finnes en nyere versjon, ellers None."""
     current = installed_version()
     if not current:
         return None
     latest = latest_version()
-    return (current, latest) if parse(latest) > parse(current) else None
+    return (current, latest) if parse_version(latest) > parse_version(current) else None
 
 
-def download():
+def download_latest_package():
     """Last ned nyeste .deb til cache-mappa (bakgrunnstråden). Returnerer stien."""
     CACHE.mkdir(parents=True, exist_ok=True)
     path = CACHE / "morgen-todo_all.deb"

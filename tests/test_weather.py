@@ -10,21 +10,21 @@ SAMPLE = {"current": {"temperature_2m": 7.5, "weather_code": 61, "is_day": 1},
 
 class WeatherTest(unittest.TestCase):
     def test_parse(self):
-        self.assertEqual(weather.parse(SAMPLE), {"temp": 8, "kind": "rain", "day_kind": "rain",
+        self.assertEqual(weather.parse_forecast(SAMPLE), {"temp": 8, "kind": "rain", "day_kind": "rain",
                                                  "min": 3, "max": 10, "rain": 80})
 
     def test_kinds(self):
-        self.assertEqual(weather.kind(0), "clear")
-        self.assertEqual(weather.kind(0, is_day=False), "night")
-        self.assertEqual(weather.kind(2), "partly")
-        self.assertEqual(weather.kind(75), "snow")
-        self.assertEqual(weather.kind(95), "thunder")
-        self.assertEqual(weather.kind(12345), "cloudy")
+        self.assertEqual(weather.weather_kind(0), "clear")
+        self.assertEqual(weather.weather_kind(0, is_day=False), "night")
+        self.assertEqual(weather.weather_kind(2), "partly")
+        self.assertEqual(weather.weather_kind(75), "snow")
+        self.assertEqual(weather.weather_kind(95), "thunder")
+        self.assertEqual(weather.weather_kind(12345), "cloudy")
 
     def test_remark(self):
-        self.assertEqual(weather.remark(weather.parse(SAMPLE)), "take an umbrella! ☔")
-        self.assertEqual(weather.remark({"day_kind": "clear", "max": 22, "rain": 0}), "nice day! ☀")
-        self.assertIsNone(weather.remark({"day_kind": "cloudy", "max": 10, "rain": 10}))
+        self.assertEqual(weather.cat_remark(weather.parse_forecast(SAMPLE)), "take an umbrella! ☔")
+        self.assertEqual(weather.cat_remark({"day_kind": "clear", "max": 22, "rain": 0}), "nice day! ☀")
+        self.assertIsNone(weather.cat_remark({"day_kind": "cloudy", "max": 10, "rain": 10}))
 
     def test_icons_are_rectangular(self):
         for name, icon in weather.ICONS.items():

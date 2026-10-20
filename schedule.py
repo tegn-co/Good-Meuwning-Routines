@@ -6,7 +6,7 @@ Lagres under "schedule" i ~/.config/morgen-todo/config.json:
   close   – vinduet lagrer og lukker seg selv
   lunch / lunch_end – katten spiser mellom disse tidene
   morning_days / hours_days – ukedagene hver påminnelse gjelder (0 = mandag)
-Endringer skrives inn i timerne med apply_timers().
+Endringer skrives inn i timerne med apply_reminders().
 """
 import json
 import os
@@ -14,7 +14,7 @@ import subprocess
 from datetime import datetime, time as dtime, timedelta
 from pathlib import Path
 
-import db
+import database as db
 
 DEFAULTS = {
     "morning": "08:00", "morning_on": True,
@@ -49,25 +49,25 @@ def save(schedule):
     db.CONFIG_FILE.write_text(json.dumps(config, indent=2))
 
 
-def parse(hhmm):
+def parse_hhmm(hhmm):
     h, m = hhmm.split(":")
     return dtime(int(h), int(m))
 
 
-def next_time(sch, key, now=None):
+def next_reminder_time(sch, key, now=None):
     """Neste gang en påminnelse skal gå (brukes når appen planlegger selv, som Flatpak)."""
     if not sch[f"{key}_on"] or not sch[f"{key}_days"]:
         return "off"
     now = now or datetime.now()
     for add in range(8):
         day = now.date() + timedelta(days=add)
-        at = datetime.combine(day, parse(sch[key]))
+        at = datetime.combine(day, parse_hhmm(sch[key]))
         if day.weekday() in sch[f"{key}_days"] and at > now:
             return at.strftime("%a %Y-%m-%d %H:%M:%S")
     return "off"
 
 
-def request_background(autostart):
+def request_autostart(autostart):
     """Flatpak: be systemet om å starte appen usynlig ved innlogging (Background-portalen)."""
     from gi.repository import Gio, GLib
     opts = {
@@ -82,13 +82,13 @@ def request_background(autostart):
                   GLib.Variant("(sa{sv})", ("", opts)), None, Gio.DBusCallFlags.NONE, 5000, None)
 
 
-def apply_timers(schedule):
+def apply_reminders(schedule):
     """Skriv tidene inn i systemd-timerne og slå dem av/på. Returnerer neste kjøring per timer.
-    Som Flatpak finnes ingen systemd-timere: appen planlegger selv (App.scheduler_tick), og ber bare
+    Som Flatpak finnes ingen systemd-timere: appen planlegger selv (App.fire_due_reminders), og ber bare
     om å bli startet ved innlogging."""
     if db.IN_FLATPAK:
-        request_background(any(schedule[f"{k}_on"] and schedule[f"{k}_days"] for k in TIMERS))
-        return {k: next_time(schedule, k) for k in TIMERS}
+        request_autostart(any(schedule[f"{k}_on"] and schedule[f"{k}_days"] for k in TIMERS))
+        return {k: next_reminder_time(schedule, k) for k in TIMERS}
     TIMER_DIR.mkdir(parents=True, exist_ok=True)  # finnes ikke hos nye brukere
     for key, (unit, description, persistent) in TIMERS.items():
         days = ",".join(DAY_NAMES[d] for d in sorted(schedule[f"{key}_days"])) or "Mon"  # ingen dager = slått av under
@@ -115,10 +115,10 @@ def apply_timers(schedule):
         # daemon-reload over er nok til at nytt tidspunkt gjelder; restart ville fått en Persistent-timer
         # til å kjøre med en gang
         systemctl("enable" if on else "disable", "--now", unit)
-    return next_runs()
+    return next_timer_runs()
 
 
-def next_runs():
+def next_timer_runs():
     out = {}
     for key, (unit, _, _) in TIMERS.items():
         r = systemctl("show", unit, "--property=NextElapseUSecRealtime", "--value")

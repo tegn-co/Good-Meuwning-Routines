@@ -1,3 +1,3 @@
 #!/bin/sh
 # Starter Morning Routine (installert av morgen-todo-pakken)
-exec python3 /usr/share/morgen-todo/widget.py "$@"
+exec python3 /usr/share/morgen-todo/app.py "$@"

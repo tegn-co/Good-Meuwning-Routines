@@ -48,7 +48,7 @@ DB_PATH = Path(os.environ.get("MORGEN_TODO_DB") or CONFIG.get("db_path") or DATA
 EXPECTED_HOURS = float(CONFIG.get("expected_hours", 8))  # forventet arbeidstid på hverdager
 
 
-def on_network_fs(path):
+def is_on_network_drive(path):
     """Ligger stien på en nettverksdisk? (lengste treff i /proc/mounts)"""
     try:
         mounts = [line.split()[1:3] for line in Path("/proc/mounts").read_text().splitlines()]
@@ -63,7 +63,7 @@ def on_network_fs(path):
     return fstype in NETWORK_FS
 
 
-def server_now(directory):
+def file_server_time(directory):
     """Klokka på filserveren (mtime på en fil vi lager der), så maskiner med feil klokke ikke tar andres låser."""
     probe = directory / f".morgen-todo-clock-{os.getpid()}"
     probe.touch()
@@ -75,13 +75,13 @@ def server_now(directory):
 
 def remove_stale_lock(lock):
     try:
-        if lock.exists() and server_now(lock.parent) - lock.stat().st_mtime > STALE_LOCK_SECONDS:
+        if lock.exists() and file_server_time(lock.parent) - lock.stat().st_mtime > STALE_LOCK_SECONDS:
             lock.rmdir() if lock.is_dir() else lock.unlink()
     except FileNotFoundError:
         pass  # låsen ble frigjort (eller ryddet av en annen) i mellomtiden
 
 
-def add_column(conn, sql):
+def add_column_if_missing(conn, sql):
     """ALTER TABLE som tåler at en annen maskin la til kolonnen samtidig (delt database)."""
     try:
         conn.execute(sql)
@@ -92,7 +92,7 @@ def add_column(conn, sql):
 
 def connect():
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
-    if on_network_fs(DB_PATH.parent):
+    if is_on_network_drive(DB_PATH.parent):
         # Vanlig SQLite-låsing virker ikke på CIFS; bruk lock-filer, og fjern en lås som er blitt liggende
         remove_stale_lock(Path(f"{DB_PATH}.lock"))
         conn = sqlite3.connect(f"file:{DB_PATH}?vfs=unix-dotfile", uri=True, timeout=5)
@@ -110,17 +110,17 @@ def connect():
     )
     cols = [c[1] for c in conn.execute("PRAGMA table_info(days)")]
     if "hours" not in cols:
-        add_column(conn, "ALTER TABLE days ADD COLUMN hours REAL")
+        add_column_if_missing(conn, "ALTER TABLE days ADD COLUMN hours REAL")
     if "day_off" not in cols:
         # Fridag (ferie, syk, helligdag): ingen forventet arbeidstid den dagen
-        add_column(conn, "ALTER TABLE days ADD COLUMN day_off INTEGER NOT NULL DEFAULT 0")
+        add_column_if_missing(conn, "ALTER TABLE days ADD COLUMN day_off INTEGER NOT NULL DEFAULT 0")
     if "complete" not in cols:
         # Hele listen ferdig den dagen (brukes til streaks)
-        add_column(conn, "ALTER TABLE days ADD COLUMN complete INTEGER NOT NULL DEFAULT 0")
+        add_column_if_missing(conn, "ALTER TABLE days ADD COLUMN complete INTEGER NOT NULL DEFAULT 0")
     if "expected" not in cols:
         # Forventet tid lagres per dag, så en ny arbeidsdag-lengde ikke endrer gammel overtid.
         # Eksisterende dager får dagens regel.
-        add_column(conn, "ALTER TABLE days ADD COLUMN expected REAL")
+        add_column_if_missing(conn, "ALTER TABLE days ADD COLUMN expected REAL")
         conn.execute(
             """UPDATE days SET expected = CASE WHEN day_off = 1 OR strftime('%w', date) IN ('0', '6')
                                                THEN 0 ELSE ? END
@@ -154,12 +154,12 @@ def session():
         conn.close()
 
 
-def expected_for(day, day_off=False):
+def expected_hours_for(day, day_off=False):
     """Forventet arbeidstid en gitt dag: 0 i helgen og på fridager."""
     return 0.0 if day_off or day.weekday() >= 5 else EXPECTED_HOURS
 
 
-def unfinished_plan(plan, checks):
+def unfinished_plan_tasks(plan, checks):
     """Plan-oppgaver (linjer som starter med «-») som ikke ble krysset av; tas med til neste dag."""
     checks = json.loads(checks)
     lines = (l.strip() for l in plan.splitlines())
@@ -187,7 +187,7 @@ def load_day(day):
     shared = {"routine": routine, "order": order, "hidden": hidden}
     if fresh:
         # Ny dag: uferdige plan-oppgaver fra forrige dag blir med (timer ført på forhånd beholdes)
-        plan = "\n".join(f"- {t}" for t in unfinished_plan(*prev)) if prev else ""
+        plan = "\n".join(f"- {t}" for t in unfinished_plan_tasks(*prev)) if prev else ""
         hours, day_off = (row[3], bool(row[4])) if row else (None, False)
         return {"checks": {}, "plan": plan, "meetings": [], "hours": hours, "day_off": day_off, **shared}
     return {"checks": json.loads(row[0]), "plan": row[1], "meetings": json.loads(row[2]),
@@ -211,7 +211,7 @@ def save_day(day, state):
                 datetime.now().isoformat(timespec="seconds"),
                 state["hours"],
                 int(bool(state.get("day_off"))),
-                expected_for(day, state.get("day_off")),
+                expected_hours_for(day, state.get("day_off")),
                 int(bool(state.get("complete"))),
             ),
         )
@@ -225,13 +225,13 @@ def save_day(day, state):
                          [(r["id"], r["text"], i) for i, r in enumerate(state["routine"])])
 
 
-def get_hours(day):
+def get_logged_hours(day):
     with session() as conn:
         row = conn.execute("SELECT hours, day_off FROM days WHERE date = ?", (day.isoformat(),)).fetchone()
     return {"hours": row[0], "day_off": bool(row[1])} if row else {"hours": None, "day_off": False}
 
 
-def set_hours(day, hours, day_off):
+def set_logged_hours(day, hours, day_off):
     """Før timer for en annen dag (endrer bare timer og fridag, ikke listen)."""
     with session() as conn:
         conn.execute(
@@ -239,7 +239,7 @@ def set_hours(day, hours, day_off):
                ON CONFLICT(date) DO UPDATE SET hours = excluded.hours, day_off = excluded.day_off,
                                                updated_at = excluded.updated_at, expected = excluded.expected""",
             (day.isoformat(), datetime.now().isoformat(timespec="seconds"), hours, int(day_off),
-             expected_for(day, day_off)),
+             expected_hours_for(day, day_off)),
         )
 
 
@@ -275,7 +275,7 @@ def streak_info(day, today_complete):
     return {"streak": streak, "best": best}
 
 
-def summary(day):
+def overtime_summary(day):
     """Overtid (timer minus forventet tid) totalt, denne uka og denne måneden; bare dager med førte timer,
     og ikke dager fram i tid. Helg og fridager har forventet tid 0, så timer da teller som overtid."""
     week_start = (day - timedelta(days=day.weekday())).isoformat()
@@ -372,7 +372,7 @@ def export_hours_csv(path):
     return len(rows)
 
 
-class Worker:
+class DatabaseWorker:
     """Kjører databasekall i rekkefølge på en egen tråd, så vinduet ikke fryser når disken er treg.
     Resultatet leveres tilbake på GTK-tråden: callback(resultat, feil)."""
 

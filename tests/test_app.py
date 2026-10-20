@@ -10,11 +10,11 @@ gi.require_version("Gtk", "4.0")
 from gi.repository import GLib  # noqa: E402
 
 import cat  # noqa: E402
-import db  # noqa: E402
-import onboarding  # noqa: E402
-import widget as W  # noqa: E402
+import database as db  # noqa: E402
+import tutorial  # noqa: E402
+import app as W  # noqa: E402
 
-onboarding.pin_to_dock = lambda: True
+tutorial.pin_to_dock = lambda: True
 
 
 class AppTest(unittest.TestCase):
@@ -33,16 +33,16 @@ class AppTest(unittest.TestCase):
 
         @step
         def onboarding_shown(w):
-            check(w.onboarding.get_visible(), "tutorial not shown for a new user")
+            check(w.tutorial.get_visible(), "tutorial not shown for a new user")
             check(w.state["routine"] == [] and not any(w.state["checks"].values()), "new user list not empty")
-            ob = w.onboarding
+            ob = w.tutorial
             ob.carousel.scroll_to(ob.carousel.get_nth_page(ob.carousel.get_n_pages() - 1), False)
             ob.expected.set_value(7.5)
             ob.opening.set_value(3)
 
         @step
         def finish_onboarding(w):
-            w.onboarding.go(1)
+            w.tutorial.go_to_page(1)
 
         @step
         def after_onboarding(w):
@@ -62,7 +62,7 @@ class AppTest(unittest.TestCase):
             w.on_add_todo(w.new_todo)
             rid = "r:" + w.state["routine"][0]["id"]
             w.move_item(rid, "email", after=False)
-            check(w.order()[0] == rid, "reorder failed")
+            check(w.item_order()[0] == rid, "reorder failed")
             w.move_item("random dragged text", "email", after=False)  # skal ignoreres
             w.plan.get_buffer().set_text("- write report\n- call Ola\nnote")
             check(w.plan_items() == ["write report", "call Ola"], "plan items")
@@ -86,9 +86,9 @@ class AppTest(unittest.TestCase):
 
         @step
         def update_banner(w):
-            import updates
-            self.real_newer = updates.newer_available
-            updates.newer_available = lambda: ("1.1.1", "9.9.9")
+            import updater
+            self.real_newer = updater.check_for_newer_version
+            updater.check_for_newer_version = lambda: ("1.1.1", "9.9.9")
             db.update_config(update_checked=None)
             w.check_for_update()
 
@@ -97,15 +97,15 @@ class AppTest(unittest.TestCase):
             check(w.update_bar.get_reveal_child() and "9.9.9" in w.update_lbl.get_label(),
                   f"update banner not shown: {w.update_lbl.get_label()!r}")
             w.update_bar.set_reveal_child(False)
-            import updates
-            updates.newer_available = self.real_newer
+            import updater
+            updater.check_for_newer_version = self.real_newer
 
         @step
         def weather_row(w):
             import weather as wmod
             check(not w.weather_row.get_visible(), "weather shown without a chosen place")
-            self.real_fetch = wmod.fetch
-            wmod.fetch = lambda lat, lon: {"temp": 7, "kind": "rain", "day_kind": "rain", "min": 3, "max": 9, "rain": 80}
+            self.real_fetch = wmod.fetch_forecast
+            wmod.fetch_forecast = lambda lat, lon: {"temp": 7, "kind": "rain", "day_kind": "rain", "min": 3, "max": 9, "rain": 80}
             w.choose_place({"name": "Oslo, Norge", "lat": 59.9, "lon": 10.7})
 
         @step
@@ -113,7 +113,7 @@ class AppTest(unittest.TestCase):
             import weather as wmod
             check(w.weather_row.get_visible() and w.weather_lbl.get_label() == "7° · 3–9° · rain 80%",
                   f"weather row: {w.weather_lbl.get_label()!r}")
-            wmod.fetch = self.real_fetch
+            wmod.fetch_forecast = self.real_fetch
 
         @step
         def side_panels(w):
@@ -145,29 +145,29 @@ class AppTest(unittest.TestCase):
 
         @step
         def roamer_in_bounds(w):
-            r = next(c for c in [w.overlay.get_last_child()] if isinstance(c, cat.CatRoamer))
+            r = next(c for c in [w.overlay.get_last_child()] if isinstance(c, cat.CatOverlay))
             w.title_cat.forced = "climb"
             r.SPEED = 600
             self.lap = []
 
             def sample():
-                self.lap.append(r.anchor())
+                self.lap.append(r.paw_position())
                 return len(self.lap) < 40
             GLib.timeout_add(80, sample)
 
         @step
         def roamer_checked(w):
-            r = next(c for c in [w.overlay.get_last_child()] if isinstance(c, cat.CatRoamer))
+            r = next(c for c in [w.overlay.get_last_child()] if isinstance(c, cat.CatOverlay))
             xs, ys = [p[0] for p in self.lap], [p[1] for p in self.lap]
-            check(min(xs) >= 0 and max(xs) <= r.area_w() and min(ys) >= -1 and max(ys) <= r.area_h(),
+            check(min(xs) >= 0 and max(xs) <= r.area_width() and min(ys) >= -1 and max(ys) <= r.area_height(),
                   f"cat left the window: x {min(xs):.0f}..{max(xs):.0f} y {min(ys):.0f}..{max(ys):.0f}")
-            check(w.overlay.get_height() == r.area_h(), "overlay grew")
+            check(w.overlay.get_height() == r.area_height(), "overlay grew")
             # Påskeegget: 5 klikk på katten -> playtime
             w.title_cat.forced = "sit"
 
         @step
         def playtime_start(w):
-            r = next(c for c in [w.overlay.get_last_child()] if isinstance(c, cat.CatRoamer))
+            r = next(c for c in [w.overlay.get_last_child()] if isinstance(c, cat.CatOverlay))
             t = w.title_cat
             bx, by, bw, bh = t.cat_box
             for _ in range(4):
@@ -177,19 +177,19 @@ class AppTest(unittest.TestCase):
             check(r.play_until > 0, "5 clicks on the cat did not start playtime")
             import time as _time
             check(abs(r.play_until - _time.monotonic() - cat.PLAYTIME_SECONDS) < 1, "playtime should last 30 s")
-            r.pointer = (r.area_w() - 40, r.area_h() - 40)
+            r.pointer = (r.area_width() - 40, r.area_height() - 40)
 
         @step
         def playtime_chase(w):
-            r = next(c for c in [w.overlay.get_last_child()] if isinstance(c, cat.CatRoamer))
-            x, y = r.anchor()
-            check(abs(x - (r.area_w() - 40)) < 25 and abs(y - (r.area_h() - 40)) < 25, f"cat did not reach the pointer: {x:.0f},{y:.0f}")
+            r = next(c for c in [w.overlay.get_last_child()] if isinstance(c, cat.CatOverlay))
+            x, y = r.paw_position()
+            check(abs(x - (r.area_width() - 40)) < 25 and abs(y - (r.area_height() - 40)) < 25, f"cat did not reach the pointer: {x:.0f},{y:.0f}")
             r.on_pointer_leave(None)
             r.pointer_left -= 5
 
         @step
         def playtime_end(w):
-            r = next(c for c in [w.overlay.get_last_child()] if isinstance(c, cat.CatRoamer))
+            r = next(c for c in [w.overlay.get_last_child()] if isinstance(c, cat.CatOverlay))
             check(r.mode == "title" and not w.title_cat.away, f"cat did not return after playtime: {r.mode}")
             w.title_cat.forced = None
             w.hours.set_value(6.5)
@@ -197,7 +197,7 @@ class AppTest(unittest.TestCase):
 
         def run(i=0):
             try:
-                steps[i](app.win)
+                steps[i](app.window)
             except Exception:
                 failures.append(f"{steps[i].__name__}: {traceback.format_exc()}")
             if i + 1 < len(steps):

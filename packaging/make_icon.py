@@ -15,11 +15,11 @@ ICON = "no.zivid.MorgenTodo"
 SIZES = [16, 24, 32, 48, 64, 128, 256, 512]
 # Standardkatten, uavhengig av hvordan katten er tilpasset på maskinen som bygger pakken
 COLORS = dict(cat.BREEDS["orange tabby"])
-SPRITE = cat.outline(cat.FILL["sit"][0])
+SPRITE = cat.add_outline(cat.FILL["sit"][0])
 
 
 def render(size, out):
-    w, h = cat.size(SPRITE)
+    w, h = cat.sprite_size(SPRITE)
     scale = max(1, size // max(w, h))
     surf = cairo.ImageSurface(cairo.FORMAT_ARGB32, size, size)
     cr = cairo.Context(surf)
@@ -27,7 +27,7 @@ def render(size, out):
     for row, line in enumerate(SPRITE):
         for col, ch in enumerate(line):
             if ch != ".":
-                cr.set_source_rgb(*cat.rgb(COLORS[ch]))
+                cr.set_source_rgb(*cat.hex_to_rgb(COLORS[ch]))
                 cr.rectangle(ox + col * scale, oy + row * scale, scale, scale)
                 cr.fill()
     out.parent.mkdir(parents=True, exist_ok=True)

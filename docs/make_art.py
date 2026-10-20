@@ -26,15 +26,15 @@ P = 4  # skjermpiksler per sprite-piksel i bildene
 
 def sprite(name, frame=0, breed="orange tabby", shape="normal"):
     # Alle fargene (skål, sommerfugl, tilbehør) + rasens pels, uansett hva katten er tilpasset til lokalt
-    return cat.outline(cat.SHAPES[shape](cat.FILL[name][frame])), dict(cat.COLORS, **cat.BREEDS[breed])
+    return cat.add_outline(cat.SHAPES[shape](cat.FILL[name][frame])), dict(cat.COLORS, **cat.BREEDS[breed])
 
 
-def blit(cr, rows, colors, x, y, px=P, flip=False, alpha=1.0):
-    w = cat.size(rows)[0]
+def draw_sprite(cr, rows, colors, x, y, px=P, flip=False, alpha=1.0):
+    w = cat.sprite_size(rows)[0]
     for r, line in enumerate(rows):
         for c, ch in enumerate(line):
             if ch != ".":
-                cr.set_source_rgba(*cat.rgb(colors.get(ch, FG)), alpha)
+                cr.set_source_rgba(*cat.hex_to_rgb(colors.get(ch, FG)), alpha)
                 cr.rectangle(x + ((w - 1 - c) if flip else c) * px, y + r * px, px, px)
                 cr.fill()
 
@@ -43,7 +43,7 @@ def text(cr, s, x, y, size, color=FG):
     lay = PangoCairo.create_layout(cr)
     lay.set_font_description(Pango.FontDescription.from_string(f"Silkscreen {size}px"))
     lay.set_text(s, -1)
-    cr.set_source_rgb(*cat.rgb(color))
+    cr.set_source_rgb(*cat.hex_to_rgb(color))
     cr.move_to(x, y)
     PangoCairo.show_layout(cr, lay)
     return lay.get_pixel_extents()[1]
@@ -69,9 +69,9 @@ def banner():
     text(cr, "_", tx + logical.width + 8, ty, 72, ACCENT)
     ground = ty + ink.y  # oversiden av bokstavene: katten og skåla står her
     rows, colors = sprite("walk", 1)
-    blit(cr, rows, colors, 300, ground - cat.size(rows)[1] * P + P)
+    draw_sprite(cr, rows, colors, 300, ground - cat.sprite_size(rows)[1] * P + P)
     bowl = cat.BOWLS[0]
-    blit(cr, bowl, colors, 640, ground - cat.size(bowl)[1] * P + P)
+    draw_sprite(cr, bowl, colors, 640, ground - cat.sprite_size(bowl)[1] * P + P)
     text(cr, "a morning checklist with a pixel cat", tx + 2, ty + ink.y + ink.height + 22, 18, "#8a8a85")
     surf.write_to_png(str(HERE / "banner.png"))
 
@@ -79,25 +79,25 @@ def banner():
 def single(name, frame, file, extra=None, w=200, h=120):
     surf, cr = canvas(w, h, bg=False)
     rows, colors = sprite(name, frame)
-    x = (w - cat.size(rows)[0] * P) // 2 - (20 if extra == "eat" else 0)
-    y = h - 8 - cat.size(rows)[1] * P
-    blit(cr, rows, colors, x, y)
+    x = (w - cat.sprite_size(rows)[0] * P) // 2 - (20 if extra == "eat" else 0)
+    y = h - 8 - cat.sprite_size(rows)[1] * P
+    draw_sprite(cr, rows, colors, x, y)
     if extra == "sleep":
         for i, (dx, dy) in enumerate(((60, 30), (75, 12), (92, -4))):
-            blit(cr, cat.Z, {"e": "#8a8a85"}, x + dx, y + dy - 10, px=3, alpha=1 - i * 0.3)
+            draw_sprite(cr, cat.Z, {"e": "#8a8a85"}, x + dx, y + dy - 10, px=3, alpha=1 - i * 0.3)
     if extra == "eat":
         bowl = cat.BOWLS[0]
-        blit(cr, bowl, colors, x + 16 * P, h - 8 - cat.size(bowl)[1] * P + P)
+        draw_sprite(cr, bowl, colors, x + 16 * P, h - 8 - cat.sprite_size(bowl)[1] * P + P)
     if extra == "heart":
-        blit(cr, cat.HEART, {"p": "#ff9bb0"}, x + cat.size(rows)[0] * P // 2 - 10, y - 30, px=4)
+        draw_sprite(cr, cat.HEART, {"p": "#ff9bb0"}, x + cat.sprite_size(rows)[0] * P // 2 - 10, y - 30, px=4)
     surf.write_to_png(str(HERE / file))
 
 
 def butterfly():
     surf, cr = canvas(200, 130, bg=False)
     rows, colors = sprite("run", 0)
-    blit(cr, rows, colors, 40, 130 - 8 - cat.size(rows)[1] * P - 20)  # midt i hoppet
-    blit(cr, cat.BUTTERFLY_SPRITES[0], colors, 135, 18, px=4)
+    draw_sprite(cr, rows, colors, 40, 130 - 8 - cat.sprite_size(rows)[1] * P - 20)  # midt i hoppet
+    draw_sprite(cr, cat.BUTTERFLY_SPRITES[0], colors, 135, 18, px=4)
     surf.write_to_png(str(HERE / "cat-butterfly.png"))
 
 
@@ -110,13 +110,13 @@ def accessories():
         cat.UNLOCKED, cat.SEASON_OVERRIDE = set(unlocked), season
         cat._DRESSED.clear()
         rows, base = sprite("sit", 0)
-        rows = cat.dress(rows)
-        colors = dict(cat.active_colors(), **({} if season == "halloween" else cat.BREEDS["orange tabby"]))
-        x, y = i * 130 + 20, 132 - cat.size(rows)[1] * P
-        blit(cr, rows, colors, x, y)
+        rows = cat.add_accessories(rows)
+        colors = dict(cat.current_colors(), **({} if season == "halloween" else cat.BREEDS["orange tabby"]))
+        x, y = i * 130 + 20, 132 - cat.sprite_size(rows)[1] * P
+        draw_sprite(cr, rows, colors, x, y)
         if cup:
-            cup_rows = cat.outline(cat.CUP)
-            blit(cr, cup_rows, colors, x + cat.size(rows)[0] * P + 4, 132 - cat.size(cup_rows)[1] * P, px=3)
+            cup_rows = cat.add_outline(cat.CUP)
+            draw_sprite(cr, cup_rows, colors, x + cat.sprite_size(rows)[0] * P + 4, 132 - cat.sprite_size(cup_rows)[1] * P, px=3)
     cat.UNLOCKED, cat.SEASON_OVERRIDE = set(), None
     surf.write_to_png(str(HERE / "accessories.png"))
 
@@ -126,18 +126,18 @@ def breeds():
     surf, cr = canvas(110 * len(names), 120, bg=False)
     for i, name in enumerate(names):
         rows, colors = sprite("sit", 0, name, cat.BREED_SHAPES.get(name, "normal"))
-        blit(cr, rows, colors, i * 110 + (110 - cat.size(rows)[0] * P) // 2, 112 - cat.size(rows)[1] * P)
+        draw_sprite(cr, rows, colors, i * 110 + (110 - cat.sprite_size(rows)[0] * P) // 2, 112 - cat.sprite_size(rows)[1] * P)
     surf.write_to_png(str(HERE / "breeds.png"))
 
 
 def divider():
     """Smal stripe: en liten katt som går langs en linje."""
     surf, cr = canvas(600, 40, bg=False)
-    cr.set_source_rgb(*cat.rgb("#8a8a85"))
+    cr.set_source_rgb(*cat.hex_to_rgb("#8a8a85"))
     cr.rectangle(0, 34, 600, 2)
     cr.fill()
     rows, colors = sprite("walk", 0)
-    blit(cr, rows, colors, 520, 35 - cat.size(rows)[1] * 2 + 2, px=2)
+    draw_sprite(cr, rows, colors, 520, 35 - cat.sprite_size(rows)[1] * 2 + 2, px=2)
     surf.write_to_png(str(HERE / "divider.png"))
 
 

@@ -9,9 +9,9 @@ import unittest
 from pathlib import Path
 
 from tests import env
-import i18n
+import translations
 
-MODULES = ["widget.py", "cat.py", "cat_settings.py", "pomodoro.py", "onboarding.py"]
+MODULES = ["app.py", "cat.py", "cat_panel.py", "pomodoro_panel.py", "tutorial.py"]
 
 
 class I18nTest(unittest.TestCase):
@@ -35,7 +35,7 @@ class I18nTest(unittest.TestCase):
 
     def test_placeholders_match(self):
         fields = lambda s: sorted(f for _t, f, _s, _c in string.Formatter().parse(s) if f)
-        bad = [en for en, nb in i18n.NB.items() if fields(en) != fields(nb)]
+        bad = [en for en, nb in translations.NB.items() if fields(en) != fields(nb)]
         self.assertEqual(bad, [])
 
     def test_app_starts_in_norwegian(self):
@@ -45,11 +45,11 @@ class I18nTest(unittest.TestCase):
         (tmp / "data" / "fonts").mkdir(parents=True)
         script = """
 import sys; sys.path.insert(0, %r)
-import widget as W
+import app as W
 from gi.repository import GLib
 app = W.App(); app.set_application_id("no.zivid.MorgenTodoNb")
 def check():
-    w = app.win
+    w = app.window
     print("TITLE", w.title_cat.title); print("ITEM", w.titles["email"].get_label()); print("HOURS", w.today_diff.get_label())
     from gi.repository import Gtk
     w.streak_lbl.set_label("12 dager på rad"); w.streak_lbl.set_visible(True)

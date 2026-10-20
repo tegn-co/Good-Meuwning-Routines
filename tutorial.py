@@ -8,10 +8,10 @@ gi.require_version("Gtk", "4.0")
 gi.require_version("Adw", "1")
 from gi.repository import Adw, Gio, GLib, Gtk  # noqa: E402
 
-import db
+import database as db
 import schedule
 from cat import TitleCat
-from i18n import _
+from translations import _
 
 APP_DESKTOP = "no.zivid.MorgenTodo.desktop"
 
@@ -40,7 +40,7 @@ PAGES = [
 ]
 
 
-def on_gnome():
+def is_gnome_desktop():
     if db.IN_FLATPAK:
         return False  # docken er utenfor sandkassen; Flatpak-apper festes av brukeren selv
     source = Gio.SettingsSchemaSource.get_default()
@@ -49,7 +49,7 @@ def on_gnome():
 
 def pin_to_dock():
     """Legg appen til favorittene i GNOME/Ubuntu-docken (oppgavelinja)."""
-    if not on_gnome():
+    if not is_gnome_desktop():
         return False
     settings = Gio.Settings.new("org.gnome.shell")
     favorites = list(settings.get_strv("favorite-apps"))
@@ -66,7 +66,7 @@ def label(text, *classes):
 
 
 def time_picker(hhmm):
-    t = schedule.parse(hhmm)
+    t = schedule.parse_hhmm(hhmm)
     box = Gtk.Box(spacing=2, hexpand=True, halign=Gtk.Align.END)
     spins = []
     for value, top, step in ((t.hour, 23, 1), (t.minute, 59, 5)):
@@ -81,7 +81,7 @@ def time_picker(hhmm):
     return box, lambda: f"{int(spins[0].get_value()):02d}:{int(spins[1].get_value()):02d}"
 
 
-class Onboarding(Adw.Window):
+class Tutorial(Adw.Window):
     def __init__(self, parent, palette, on_done, opening=0.0):
         super().__init__(application=parent.get_application(), transient_for=parent, modal=True,
                          title=_("Welcome"), default_width=420, default_height=560)
@@ -95,20 +95,20 @@ class Onboarding(Adw.Window):
         self.cats = []
         for title, anim, text in PAGES:
             self.carousel.append(self.page(palette, title, anim, label(text, "detail")))
-        self.carousel.append(self.page(palette, "set up", "sit", self.setup_form()))
+        self.carousel.append(self.page(palette, "set up", "sit", self.make_setup_form()))
         self.carousel.connect("page-changed", self.on_page)
         root.append(self.carousel)
 
         nav = Gtk.Box(margin_start=24, margin_end=24, margin_bottom=18, spacing=8)
         self.back = Gtk.Button(label=_("back"))
         self.back.add_css_class("pixel")
-        self.back.connect("clicked", lambda _: self.go(-1))
+        self.back.connect("clicked", lambda _: self.go_to_page(-1))
         nav.append(self.back)
         nav.append(Adw.CarouselIndicatorDots(carousel=self.carousel, hexpand=True))
         self.next = Gtk.Button(label=_("next"))
         self.next.add_css_class("pixel")
         self.next.add_css_class("go")
-        self.next.connect("clicked", lambda _: self.go(1))
+        self.next.connect("clicked", lambda _: self.go_to_page(1))
         nav.append(self.next)
         root.append(nav)
         self.set_content(root)
@@ -124,7 +124,7 @@ class Onboarding(Adw.Window):
         scroll.set_child(box)
         return scroll
 
-    def setup_form(self):
+    def make_setup_form(self):
         sch = schedule.load()
         form = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
         form.append(label("A few choices – everything can be changed later under ⚙.", "detail", "muted"))
@@ -163,13 +163,13 @@ class Onboarding(Adw.Window):
 
         self.pin = Gtk.CheckButton(label=_("pin Morning Routine to the dock"), active=True)
         self.pin.add_css_class("detail")
-        self.pin.set_visible(on_gnome())
+        self.pin.set_visible(is_gnome_desktop())
         form.append(self.pin)
         self.result = label("", "detail", "muted")
         form.append(self.result)
         return form
 
-    def go(self, step):
+    def go_to_page(self, step):
         i = round(self.carousel.get_position()) + step
         n = self.carousel.get_n_pages()
         if i >= n:

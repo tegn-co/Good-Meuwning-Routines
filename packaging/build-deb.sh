@@ -13,7 +13,7 @@ install -d "$ROOT/DEBIAN" "$ROOT/usr/share/morgen-todo" "$ROOT/usr/bin" "$ROOT/u
   "$ROOT/usr/lib/systemd/user" "$ROOT/usr/share/applications" "$ROOT/usr/share/fonts/truetype/morgen-todo" \
   "$ROOT/usr/share/doc/morgen-todo" "$ROOT/usr/share/icons/hicolor"
 
-for f in widget.py cat.py cat_settings.py pomodoro.py db.py schedule.py onboarding.py updates.py i18n.py weather.py; do
+for f in app.py cat.py cat_panel.py pomodoro_panel.py database.py schedule.py tutorial.py updater.py translations.py weather.py; do
   install -m 644 "$SRC/$f" "$ROOT/usr/share/morgen-todo/$f"
 done
 # Versjonen appen sammenligner med GitHub når den ser etter oppdateringer

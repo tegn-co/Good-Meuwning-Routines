@@ -5,7 +5,7 @@ brukes systemspråket: nb/nn/no gir norsk, alt annet engelsk. Endring krever oms
 """
 import os
 
-import db
+import database as db
 
 LANGUAGES = [("en", "English"), ("nb", "Norsk")]
 

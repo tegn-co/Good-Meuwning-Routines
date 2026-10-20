@@ -137,8 +137,8 @@ are detected and handled automatically.
 Run from source:
 
 ```sh
-python3 widget.py              # the app
-python3 widget.py --cat=climb  # force an animation: walk, play, sleep, sit, jump, climb,
+python3 app.py                 # the app
+python3 app.py --cat=climb     # force an animation: walk, play, sleep, sit, jump, climb,
                                # butterfly, groom, stretch, eat
 python3 docs/make_art.py       # regenerate the pixel art in this README
 ```
@@ -165,15 +165,15 @@ flatpak-builder --user --install build packaging/flatpak/no.zivid.MorgenTodo.yml
 
 | File | |
 |---|---|
-| `widget.py` | main window: list, plan, hours, settings, backup, updates |
+| `app.py` | the app and its main window: list, plan, hours, settings, backup, updates |
 | `cat.py` | the pixel cat, its animations, accessories and seasons |
-| `cat_settings.py` | breed, colors, accessories and what the cat says |
-| `pomodoro.py` | pomodoro panel |
-| `db.py` | SQLite database, streaks, backup and CSV export |
+| `cat_panel.py` | cat side panel: breed, colors, accessories and what the cat says |
+| `pomodoro_panel.py` | pomodoro side panel |
+| `database.py` | SQLite database, streaks, backup and CSV export |
 | `schedule.py` | times for opening, reminders, auto close and lunch (systemd timers, or in-app for Flatpak) |
-| `onboarding.py` | first-start tutorial and setup |
-| `updates.py` | checks GitHub for new versions and installs them |
-| `i18n.py` | English and Norwegian |
+| `tutorial.py` | first-start tutorial and setup |
+| `updater.py` | checks GitHub for new versions and installs them |
+| `translations.py` | English and Norwegian texts |
 | `weather.py` | today's weather from Open-Meteo, with pixel icons |
 | `tests/` | unit and app tests |
 | `packaging/` | .deb build script, Flatpak manifest, icon generator, fonts |

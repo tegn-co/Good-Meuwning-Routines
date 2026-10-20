@@ -1,2 +1,2 @@
 #!/bin/sh
-exec python3 /app/share/morgen-todo/widget.py "$@"
+exec python3 /app/share/morgen-todo/app.py "$@"
