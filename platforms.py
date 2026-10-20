@@ -93,6 +93,30 @@ def _request_flatpak_background(autostart):
                   GLib.Variant("(sa{sv})", ("", opts)), None, Gio.DBusCallFlags.NONE, 5000, None)
 
 
+def resize_window(window, width_change):
+    """Windows: GTK only applies a new default size when the window is next laid out, so resize the
+    native window directly (SetWindowPos) by the same amount. No-op elsewhere."""
+    if not IS_WINDOWS or not width_change:
+        return
+    try:
+        import ctypes
+        from ctypes import wintypes
+        import gi
+        gi.require_version("GdkWin32", "4.0")
+        from gi.repository import GdkWin32
+        hwnd = GdkWin32.Win32Surface.get_handle(window.get_surface())
+        user32 = ctypes.windll.user32
+        rect = wintypes.RECT()
+        user32.GetWindowRect(wintypes.HWND(hwnd), ctypes.byref(rect))
+        scale = window.get_surface().get_scale()
+        new_width = rect.right - rect.left + round(width_change * scale)
+        SWP_NOMOVE, SWP_NOZORDER, SWP_NOACTIVATE = 0x2, 0x4, 0x10
+        user32.SetWindowPos(wintypes.HWND(hwnd), None, 0, 0, new_width, rect.bottom - rect.top,
+                            SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE)
+    except Exception:  # noqa: BLE001 – fall back to GTK's default size
+        pass
+
+
 def notify(title, body, urgent=False):
     """Desktop notification. notify-send on Linux; elsewhere through GApplication (may be ignored)."""
     if not IS_WINDOWS and shutil.which("notify-send"):

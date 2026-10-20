@@ -31,7 +31,7 @@ STALE_LOCK_SECONDS = 60  # older locks are left from a crash (saves take under a
 
 def load_config():
     try:
-        return json.loads(CONFIG_FILE.read_text())
+        return json.loads(CONFIG_FILE.read_text(encoding="utf-8"))
     except (OSError, ValueError):
         return {}
 
@@ -41,7 +41,7 @@ def update_config(**changes):
     config = load_config()
     config.update(changes)
     CONFIG_DIR.mkdir(parents=True, exist_ok=True)
-    CONFIG_FILE.write_text(json.dumps(config, indent=2))
+    CONFIG_FILE.write_text(json.dumps(config, indent=2), encoding="utf-8")
     return config
 
 
@@ -53,7 +53,7 @@ EXPECTED_HOURS = float(CONFIG.get("expected_hours", 8))  # expected hours on wee
 def is_on_network_drive(path):
     """Is the path on a network drive? (longest match in /proc/mounts)"""
     try:
-        mounts = [line.split()[1:3] for line in Path("/proc/mounts").read_text().splitlines()]
+        mounts = [line.split()[1:3] for line in Path("/proc/mounts").read_text(encoding="utf-8").splitlines()]
     except OSError:
         return False
     path = str(path.resolve())
@@ -365,7 +365,7 @@ def export_hours_csv(path):
         rows = conn.execute(
             """SELECT date, hours, COALESCE(expected, ?), day_off FROM days
                WHERE hours IS NOT NULL ORDER BY date""", (EXPECTED_HOURS,)).fetchall()
-    with open(path, "w", newline="") as f:
+    with open(path, "w", newline="", encoding="utf-8") as f:
         w = csv.writer(f)
         w.writerow(["date", "weekday", "hours", "expected", "overtime", "day_off"])
         for d, hours, expected, day_off in rows:

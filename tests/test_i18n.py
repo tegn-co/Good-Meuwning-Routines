@@ -19,7 +19,7 @@ class I18nTest(unittest.TestCase):
         """A parameter or variable named _ in a function that calls _("…") causes a TypeError."""
         problems = []
         for f in MODULES:
-            tree = ast.parse((env.ROOT / f).read_text())
+            tree = ast.parse((env.ROOT / f).read_text(encoding="utf-8"))
             for fn in ast.walk(tree):
                 if not isinstance(fn, (ast.FunctionDef, ast.Lambda)):
                     continue
@@ -41,7 +41,7 @@ class I18nTest(unittest.TestCase):
     def test_app_starts_in_norwegian(self):
         tmp = Path(tempfile.mkdtemp(prefix="morgen-todo-nb-"))
         (tmp / "config" / "morgen-todo").mkdir(parents=True)
-        (tmp / "config" / "morgen-todo" / "config.json").write_text(json.dumps({"language": "nb", "onboarded": True}))
+        (tmp / "config" / "morgen-todo" / "config.json").write_text(json.dumps({"language": "nb", "onboarded": True}), encoding="utf-8")
         (tmp / "data" / "fonts").mkdir(parents=True)
         script = """
 import sys; sys.path.insert(0, %r)

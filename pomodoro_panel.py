@@ -118,7 +118,7 @@ class PomodoroPanel(Gtk.Box):
     # --- settings ---
     def load_settings(self):
         try:
-            saved = json.loads(SETTINGS_FILE.read_text())
+            saved = json.loads(SETTINGS_FILE.read_text(encoding="utf-8"))
         except (OSError, ValueError):
             saved = {}
         return {k: int(saved.get(k, v)) for k, v in DEFAULTS.items()}
@@ -127,7 +127,7 @@ class PomodoroPanel(Gtk.Box):
         self.settings[key] = int(spin.get_value())
         try:
             CONFIG_DIR.mkdir(parents=True, exist_ok=True)
-            SETTINGS_FILE.write_text(json.dumps(self.settings))
+            SETTINGS_FILE.write_text(json.dumps(self.settings), encoding="utf-8")
         except OSError:
             pass
         # An untouched phase takes the new time now; otherwise it applies from the next phase
@@ -142,7 +142,7 @@ class PomodoroPanel(Gtk.Box):
     # --- stats ---
     def load_stats(self):
         try:
-            data = json.loads(STATS_FILE.read_text())
+            data = json.loads(STATS_FILE.read_text(encoding="utf-8"))
             return data["count"] if data.get("date") == date.today().isoformat() else 0
         except (OSError, ValueError, KeyError):
             return 0
@@ -150,7 +150,7 @@ class PomodoroPanel(Gtk.Box):
     def save_stats(self):
         try:
             STATS_FILE.parent.mkdir(parents=True, exist_ok=True)
-            STATS_FILE.write_text(json.dumps({"date": date.today().isoformat(), "count": self.today}))
+            STATS_FILE.write_text(json.dumps({"date": date.today().isoformat(), "count": self.today}), encoding="utf-8")
         except OSError:
             pass
 

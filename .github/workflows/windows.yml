@@ -11,6 +11,7 @@ on:
   push:
     branches: [main]
     paths: ["packaging/windows/**", "platforms.py", ".github/workflows/windows.yml"]
+  pull_request:  # every pull request builds and checks the Windows installer too
   workflow_dispatch:
     inputs:
       version:

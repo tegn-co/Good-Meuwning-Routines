@@ -86,7 +86,7 @@ SETTINGS = {"breed": "orange tabby", "shape": "normal"}  # shape is kept when co
 
 def load_cat_settings():
     try:
-        data = json.loads(CAT_FILE.read_text())
+        data = json.loads(CAT_FILE.read_text(encoding="utf-8"))
     except (OSError, ValueError):
         data = {}
     SETTINGS["breed"] = data.get("breed", "orange tabby")
@@ -106,7 +106,7 @@ def save_cat_settings():
             "colors": {k: COLORS[k] for k, _ in PARTS},
             "phrases": PHRASES,
             "wear": SETTINGS.get("wear", {}),
-        }, indent=2))
+        }, indent=2), encoding="utf-8")
     except OSError:
         pass
 

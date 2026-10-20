@@ -1334,6 +1334,8 @@ class MainWindow(Adw.ApplicationWindow):
         """Set the visible width, compensating for GTK's larger default size (X11 without shadows: 10 px); keep the height."""
         dw, dh = self.get_default_size()
         self.set_default_size(round(width) + self.size_delta, dh)
+        if self.get_mapped():
+            platforms.resize_window(self, round(width) - self.get_width())
 
     def animate_side_panel(self, opening):
         # Opening grows the window to the right; closing shrinks it from the right
@@ -1436,7 +1438,7 @@ class App(Adw.Application):
             win = self.window = MainWindow(self, cat)
             win.connect("destroy", lambda *_: setattr(self, "window", None))  # in background mode a new window may be opened later
             try:
-                theme = THEME_FILE.read_text().strip()
+                theme = THEME_FILE.read_text(encoding="utf-8").strip()
             except OSError:
                 theme = "system"
             self.set_theme(theme)
@@ -1444,7 +1446,7 @@ class App(Adw.Application):
                 GLib.timeout_add(600, lambda: win.show_tutorial() and False)  # first run: welcome tutorial
             if smoke := os.environ.get("MORGEN_TODO_SMOKE_TEST"):
                 # Used by the Windows build check: prove the installed app starts, then quit
-                GLib.timeout_add(4000, lambda: (Path(smoke).write_text(f"ok {updater.installed_version()}"),
+                GLib.timeout_add(4000, lambda: (Path(smoke).write_text(f"ok {updater.installed_version()}", encoding="utf-8"),
                                                 self.quit(), False)[-1])
         else:
             win.check_new_day()  # e.g. the 08:00 timer raises a window left open since yesterday
@@ -1494,7 +1496,7 @@ class App(Adw.Application):
         self.set_theme(names[(names.index(self.theme) + 1) % len(names)])
         try:
             THEME_FILE.parent.mkdir(parents=True, exist_ok=True)
-            THEME_FILE.write_text(self.theme)
+            THEME_FILE.write_text(self.theme, encoding="utf-8")
         except OSError:
             pass
 
