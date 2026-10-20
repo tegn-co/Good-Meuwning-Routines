@@ -50,13 +50,27 @@ The animation changes every 15 minutes. Check something off and it says **good j
 
 ## Install
 
-Download `morgen-todo_<version>_all.deb` and run:
+One command – downloads the latest release and installs it:
 
 ```sh
-sudo apt install ./morgen-todo_1.0.0_all.deb
+curl -fsSL https://raw.githubusercontent.com/tegn-co/Good-Meuwning-Routines/main/install.sh | sh
 ```
 
-Then open **Morning Routine** from the app menu.
+Then open **Morning Routine** from the app menu. Run the same command again to update –
+your data stays where it is.
+
+<details>
+<summary>Prefer to do it by hand?</summary>
+
+Download `morgen-todo_all.deb` from the [latest release](https://github.com/tegn-co/Good-Meuwning-Routines/releases/latest)
+and run:
+
+```sh
+sudo apt install ./morgen-todo_all.deb
+```
+
+Or read [`install.sh`](install.sh) first – it only downloads the .deb and runs `apt install`.
+</details>
 
 Requires Ubuntu 24.04 or newer (GTK ≥ 4.12, libadwaita ≥ 1.4). apt installs everything else.
 
@@ -92,7 +106,13 @@ Network drives (CIFS/NFS/SSHFS) are detected and handled automatically.
 
 <img src="docs/cat-eat.png" align="right" width="130" alt="">
 
-Build the package:
+Release a new version – GitHub Actions builds the .deb and publishes the release:
+
+```sh
+git tag v1.0.1 && git push origin v1.0.1
+```
+
+Or build the package locally:
 
 ```sh
 ./packaging/build-deb.sh 1.0.0      # -> packaging/dist/morgen-todo_1.0.0_all.deb

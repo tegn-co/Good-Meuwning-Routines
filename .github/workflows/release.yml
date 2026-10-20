@@ -1,0 +1,50 @@
+# Bygger .deb-pakken og lager en GitHub Release når en versjonstag pushes:
+#   git tag v1.0.1 && git push origin v1.0.1
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  deb:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install build tools
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq python3-gi python3-gi-cairo python3-cairo gir1.2-gtk-4.0
+
+      - name: Build .deb
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          ./packaging/build-deb.sh "$VERSION"
+          # Fast navn i tillegg, så install.sh alltid kan hente .../releases/latest/download/morgen-todo_all.deb
+          cp "packaging/dist/morgen-todo_${VERSION}_all.deb" packaging/dist/morgen-todo_all.deb
+
+      - name: Check the package installs
+        run: |
+          sudo apt-get install -y ./packaging/dist/morgen-todo_all.deb
+          dpkg -s morgen-todo | grep -E '^(Status|Version)'
+          for f in /usr/share/morgen-todo/*.py; do python3 -c "import ast; ast.parse(open('$f').read())"; done
+
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cat > notes.md <<'NOTES'
+          Install or update with one command:
+
+          ```sh
+          curl -fsSL https://raw.githubusercontent.com/tegn-co/Good-Meuwning-Routines/main/install.sh | sh
+          ```
+
+          Or download `morgen-todo_all.deb` below and run `sudo apt install ./morgen-todo_all.deb`.
+          NOTES
+          gh release create "$GITHUB_REF_NAME" packaging/dist/*.deb \
+            --title "Morning Routine $GITHUB_REF_NAME" --notes-file notes.md
