@@ -1,0 +1,7 @@
+[Unit]
+Description=Morning Routine: remind to log hours
+
+[Service]
+Type=oneshot
+ExecStart=/usr/lib/morgen-todo/morgen-todo-remind hours
+KillMode=process

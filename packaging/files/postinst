@@ -1,0 +1,8 @@
+#!/bin/sh
+set -e
+if [ "$1" = "configure" ]; then
+  command -v fc-cache >/dev/null && fc-cache -f /usr/share/fonts/truetype/morgen-todo || true
+  command -v update-desktop-database >/dev/null && update-desktop-database -q /usr/share/applications || true
+  command -v gtk-update-icon-cache >/dev/null && gtk-update-icon-cache -q -f /usr/share/icons/hicolor || true
+fi
+exit 0

@@ -1,0 +1,265 @@
+"""Databasen for morgen-todo (SQLite), brukt direkte av vinduet via en bakgrunnstråd.
+
+Plassering: ~/.local/share/morgen-todo/morgen-todo.db som standard. Kan overstyres med
+"db_path" i ~/.config/morgen-todo/config.json eller miljøvariabelen MORGEN_TODO_DB.
+Ligger databasen på en nettverksdisk (CIFS/NFS/SSHFS), brukes lock-filer i stedet for vanlig
+SQLite-låsing, og gjenglemte låser etter et krasj ryddes bort automatisk.
+"""
+import json
+import os
+from contextlib import contextmanager
+import queue
+import sqlite3
+import threading
+import time
+from datetime import date, datetime, timedelta
+from pathlib import Path
+
+CONFIG_DIR = Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config")) / "morgen-todo"
+CONFIG_FILE = CONFIG_DIR / "config.json"
+DATA_DIR = Path(os.environ.get("XDG_DATA_HOME", Path.home() / ".local" / "share")) / "morgen-todo"
+NETWORK_FS = {"cifs", "smb3", "smbfs", "nfs", "nfs4", "fuse.sshfs", "9p"}
+STALE_LOCK_SECONDS = 60  # en lås eldre enn dette er etter et krasj (lagringer tar under ett sekund)
+
+
+def load_config():
+    try:
+        return json.loads(CONFIG_FILE.read_text())
+    except (OSError, ValueError):
+        return {}
+
+
+def update_config(**changes):
+    """Slå sammen endringer inn i config.json (resten av fila beholdes)."""
+    config = load_config()
+    config.update(changes)
+    CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+    CONFIG_FILE.write_text(json.dumps(config, indent=2))
+    return config
+
+
+CONFIG = load_config()
+DB_PATH = Path(os.environ.get("MORGEN_TODO_DB") or CONFIG.get("db_path") or DATA_DIR / "morgen-todo.db").expanduser()
+EXPECTED_HOURS = float(CONFIG.get("expected_hours", 8))  # forventet arbeidstid på hverdager
+
+
+def on_network_fs(path):
+    """Ligger stien på en nettverksdisk? (lengste treff i /proc/mounts)"""
+    try:
+        mounts = [line.split()[1:3] for line in Path("/proc/mounts").read_text().splitlines()]
+    except OSError:
+        return False
+    path = str(path.resolve())
+    best, fstype = "", ""
+    for mountpoint, fs in mounts:
+        mountpoint = mountpoint.replace("\\040", " ")
+        if (path == mountpoint or path.startswith(mountpoint.rstrip("/") + "/")) and len(mountpoint) > len(best):
+            best, fstype = mountpoint, fs
+    return fstype in NETWORK_FS
+
+
+def connect():
+    DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+    if on_network_fs(DB_PATH.parent):
+        # Vanlig SQLite-låsing virker ikke på CIFS; bruk lock-filer, og fjern en lås som er blitt liggende
+        lock = Path(f"{DB_PATH}.lock")
+        if lock.exists() and time.time() - lock.stat().st_mtime > STALE_LOCK_SECONDS:
+            if lock.is_dir():
+                lock.rmdir()
+            else:
+                lock.unlink()
+        conn = sqlite3.connect(f"file:{DB_PATH}?vfs=unix-dotfile", uri=True, timeout=5)
+    else:
+        conn = sqlite3.connect(DB_PATH, timeout=5)
+    conn.execute("PRAGMA journal_mode=DELETE")
+    conn.execute(
+        """CREATE TABLE IF NOT EXISTS days (
+               date       TEXT PRIMARY KEY,
+               checks     TEXT NOT NULL DEFAULT '{}',
+               plan       TEXT NOT NULL DEFAULT '',
+               meetings   TEXT NOT NULL DEFAULT '[]',
+               updated_at TEXT NOT NULL
+           )"""
+    )
+    cols = [c[1] for c in conn.execute("PRAGMA table_info(days)")]
+    if "hours" not in cols:
+        conn.execute("ALTER TABLE days ADD COLUMN hours REAL")
+    if "day_off" not in cols:
+        # Fridag (ferie, syk, helligdag): ingen forventet arbeidstid den dagen
+        conn.execute("ALTER TABLE days ADD COLUMN day_off INTEGER NOT NULL DEFAULT 0")
+    # Rekkefølgen på punktene i listen (faste punkter og rutinepunkter), lik for alle dager
+    conn.execute("CREATE TABLE IF NOT EXISTS item_order (key TEXT PRIMARY KEY, position INTEGER NOT NULL)")
+    # Faste punkter (01–05) som er slettet i settings; kan gjenopprettes
+    conn.execute("CREATE TABLE IF NOT EXISTS hidden_items (key TEXT PRIMARY KEY)")
+    # Egne rutinepunkter som kommer tilbake hver dag; avkryssing lagres per dag i days.checks
+    conn.execute(
+        """CREATE TABLE IF NOT EXISTS routine (
+               id       TEXT PRIMARY KEY,
+               text     TEXT NOT NULL,
+               position INTEGER NOT NULL
+           )"""
+    )
+    # Innstillinger, f.eks. opening_balance = overtid opparbeidet før timeføringen startet
+    conn.execute("CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value REAL NOT NULL)")
+    return conn
+
+
+@contextmanager
+def session():
+    """Én transaksjon; tilkoblingen lukkes etterpå (ingen åpne filer på nettverksdisken)."""
+    conn = connect()
+    try:
+        with conn:
+            yield conn
+    finally:
+        conn.close()
+
+
+def expected_for(day, day_off=False):
+    """Forventet arbeidstid en gitt dag: 0 i helgen og på fridager."""
+    return 0.0 if day_off or day.weekday() >= 5 else EXPECTED_HOURS
+
+
+def unfinished_plan(plan, checks):
+    """Plan-oppgaver (linjer som starter med «-») som ikke ble krysset av; tas med til neste dag."""
+    checks = json.loads(checks)
+    lines = (l.strip() for l in plan.splitlines())
+    tasks = [l[1:].strip() for l in lines if l.startswith("-") and l[1:].strip()]
+    return [t for t in tasks if not checks.get(f"p:{t}")]
+
+
+def load_day(day):
+    with session() as conn:
+        row = conn.execute(
+            "SELECT checks, plan, meetings, hours, day_off FROM days WHERE date = ?", (day.isoformat(),)
+        ).fetchone()
+        routine = [{"id": r[0], "text": r[1]} for r in conn.execute("SELECT id, text FROM routine ORDER BY position")]
+        order = [r[0] for r in conn.execute("SELECT key FROM item_order ORDER BY position")]
+        hidden = [r[0] for r in conn.execute("SELECT key FROM hidden_items")]
+        prev = None
+        if not row:
+            # Siste dag listen faktisk ble brukt (ikke rader som bare har timer ført i settings)
+            prev = conn.execute(
+                """SELECT plan, checks FROM days WHERE date < ? AND (plan != '' OR checks != '{}')
+                   ORDER BY date DESC LIMIT 1""", (day.isoformat(),)
+            ).fetchone()
+    shared = {"routine": routine, "order": order, "hidden": hidden}
+    if not row:
+        # Ny dag: uferdige plan-oppgaver fra forrige dag blir med
+        plan = "\n".join(f"- {t}" for t in unfinished_plan(*prev)) if prev else ""
+        return {"checks": {}, "plan": plan, "meetings": [], "hours": None, "day_off": False, **shared}
+    return {"checks": json.loads(row[0]), "plan": row[1], "meetings": json.loads(row[2]),
+            "hours": row[3], "day_off": bool(row[4]), **shared}
+
+
+def save_day(day, state):
+    with session() as conn:
+        conn.execute(
+            """INSERT INTO days (date, checks, plan, meetings, updated_at, hours, day_off)
+               VALUES (?, ?, ?, ?, ?, ?, ?)
+               ON CONFLICT(date) DO UPDATE SET
+                 checks = excluded.checks, plan = excluded.plan, meetings = excluded.meetings,
+                 updated_at = excluded.updated_at, hours = excluded.hours, day_off = excluded.day_off""",
+            (
+                day.isoformat(),
+                json.dumps(state["checks"]),
+                state["plan"],
+                json.dumps(state["meetings"], ensure_ascii=False),
+                datetime.now().isoformat(timespec="seconds"),
+                state["hours"],
+                int(bool(state.get("day_off"))),
+            ),
+        )
+        conn.execute("DELETE FROM hidden_items")
+        conn.executemany("INSERT INTO hidden_items (key) VALUES (?)", [(k,) for k in state["hidden"]])
+        conn.execute("DELETE FROM item_order")
+        conn.executemany("INSERT INTO item_order (key, position) VALUES (?, ?)",
+                         [(k, i) for i, k in enumerate(state["order"])])
+        conn.execute("DELETE FROM routine")
+        conn.executemany("INSERT INTO routine (id, text, position) VALUES (?, ?, ?)",
+                         [(r["id"], r["text"], i) for i, r in enumerate(state["routine"])])
+
+
+def get_hours(day):
+    with session() as conn:
+        row = conn.execute("SELECT hours, day_off FROM days WHERE date = ?", (day.isoformat(),)).fetchone()
+    return {"hours": row[0], "day_off": bool(row[1])} if row else {"hours": None, "day_off": False}
+
+
+def set_hours(day, hours, day_off):
+    """Før timer for en annen dag (endrer bare timer og fridag, ikke listen)."""
+    with session() as conn:
+        conn.execute(
+            """INSERT INTO days (date, updated_at, hours, day_off) VALUES (?, ?, ?, ?)
+               ON CONFLICT(date) DO UPDATE SET hours = excluded.hours, day_off = excluded.day_off,
+                                               updated_at = excluded.updated_at""",
+            (day.isoformat(), datetime.now().isoformat(timespec="seconds"), hours, int(day_off)),
+        )
+
+
+def set_opening_balance(hours):
+    """Overtid opparbeidet før man begynte å føre timer her (settes i oppstartsveiviseren)."""
+    with session() as conn:
+        conn.execute("INSERT INTO settings (key, value) VALUES ('opening_balance', ?) "
+                     "ON CONFLICT(key) DO UPDATE SET value = excluded.value", (hours,))
+
+
+def summary(day):
+    """Overtid (timer minus forventet tid) totalt, denne uka og denne måneden; bare dager med førte timer.
+    Helg og fridager har forventet tid 0, så timer da teller som overtid."""
+    week_start = (day - timedelta(days=day.weekday())).isoformat()
+    month_start = day.replace(day=1).isoformat()
+    with session() as conn:
+        total, week, month, days = conn.execute(
+            """WITH d AS (
+                 SELECT date, hours - CASE WHEN day_off = 1 OR strftime('%w', date) IN ('0', '6')
+                                           THEN 0 ELSE :e END AS diff
+                 FROM days WHERE hours IS NOT NULL
+               )
+               SELECT COALESCE(SUM(diff), 0),
+                      COALESCE(SUM(CASE WHEN date >= :w THEN diff END), 0),
+                      COALESCE(SUM(CASE WHEN date >= :m THEN diff END), 0),
+                      COUNT(*)
+               FROM d""",
+            {"e": EXPECTED_HOURS, "w": week_start, "m": month_start},
+        ).fetchone()
+        row = conn.execute("SELECT value FROM settings WHERE key = 'opening_balance'").fetchone()
+    opening = row[0] if row else 0
+    return {"opening_balance": opening, "total": total + opening, "week": week, "month": month, "days_logged": days}
+
+
+class Worker:
+    """Kjører databasekall i rekkefølge på en egen tråd, så vinduet ikke fryser når disken er treg.
+    Resultatet leveres tilbake på GTK-tråden: callback(resultat, feil)."""
+
+    def __init__(self):
+        self.jobs = queue.Queue()
+        threading.Thread(target=self.run, daemon=True).start()
+
+    def run(self):
+        from gi.repository import GLib
+        while True:
+            fn, args, callback, done = self.jobs.get()
+            try:
+                result, error = fn(*args), None
+            except Exception as e:  # noqa: BLE001 – feilen vises i statuslinja
+                result, error = None, e
+            if done:
+                done.append((result, error))
+                done[0].set()
+            elif callback:
+                GLib.idle_add(lambda r=result, e=error, cb=callback: cb(r, e) and False)
+
+    def submit(self, fn, *args, callback=None):
+        self.jobs.put((fn, args, callback, None))
+
+    def run_sync(self, fn, *args, timeout=10):
+        """Vent på resultatet (brukes når vinduet lukkes). Køen foran kjøres ferdig først."""
+        done = [threading.Event()]
+        self.jobs.put((fn, args, None, done))
+        if not done[0].wait(timeout):
+            raise TimeoutError("database did not answer")
+        result, error = done[1]
+        if error:
+            raise error
+        return result

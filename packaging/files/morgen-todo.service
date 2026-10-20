@@ -1,0 +1,8 @@
+[Unit]
+Description=Morning Routine: open the list
+
+[Service]
+Type=oneshot
+ExecStart=/usr/lib/morgen-todo/morgen-todo-remind morning
+# La vinduet leve videre etter at skriptet er ferdig
+KillMode=process
