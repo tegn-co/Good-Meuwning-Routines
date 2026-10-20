@@ -76,6 +76,15 @@ class AppTest(unittest.TestCase):
             check(w.bal_total.get_label() in ("+4.50 h", "+3.00 h"), f"balance {w.bal_total.get_label()}")
 
         @step
+        def list_fits(w):
+            from gi.repository import Gtk
+            w.streak_lbl.set_label("12 days in a row")
+            w.streak_lbl.set_visible(True)
+            w.title_cat.say("unlocked: coffee cup!")
+            need = w.scroll.get_child().measure(Gtk.Orientation.HORIZONTAL, -1)[0]
+            check(need <= W.MAIN_W, f"the list needs {need} px, more than the {W.MAIN_W} px window")
+
+        @step
         def side_panels(w):
             for b in (w.cat_btn, w.settings_btn, w.pomo_btn, w.side_btn):
                 b.set_active(True)

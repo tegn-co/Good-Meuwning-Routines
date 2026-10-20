@@ -184,11 +184,13 @@ class Widget(Adw.ApplicationWindow):
         self.side_stack.add_named(self.build_settings(), "settings")
 
         meta = Gtk.Box(margin_bottom=16)
+        left = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)  # dato, og streak på egen linje under
         self.date_lbl = label("", "muted", "detail")
-        meta.append(self.date_lbl)
-        self.streak_lbl = label("", "detail", "muted")  # «3 days in a row»
-        self.streak_lbl.set_margin_start(10)
-        meta.append(self.streak_lbl)
+        left.append(self.date_lbl)
+        self.streak_lbl = label("", "detail", "muted", wrap=True)  # «3 days in a row»
+        self.streak_lbl.set_visible(False)
+        left.append(self.streak_lbl)
+        meta.append(left)
         self.blocks = Gtk.Label(use_markup=True, hexpand=True, xalign=1)
         self.blocks.add_css_class("blocks")
         meta.append(self.blocks)
@@ -272,12 +274,14 @@ class Widget(Adw.ApplicationWindow):
         self.hours_box.append(self.today_diff)
         self.day_off = Gtk.CheckButton(label="day off (vacation, sick, holiday)", margin_start=26)
         self.day_off.add_css_class("detail")
+        self.day_off.get_last_child().set_wrap(True)
         self.day_off.connect("toggled", self.on_day_off_changed)
         self.hours_box.append(self.day_off)
         bal = Gtk.Box(margin_start=30, spacing=16)
         self.bal_total = label("", "big")
         bal.append(self.bal_total)
-        self.bal_detail = label("", "detail", "muted")
+        self.bal_detail = label("", "detail", "muted", wrap=True)
+        self.bal_detail.set_hexpand(True)
         bal.append(self.bal_detail)
         self.hours_box.append(bal)
         body.append(self.hours_box)
@@ -322,7 +326,8 @@ class Widget(Adw.ApplicationWindow):
         if err or not info:
             return
         n = info["streak"]
-        self.streak_lbl.set_label(f"· {n} day{'s' if n != 1 else ''} in a row" if n >= 2 else "")
+        self.streak_lbl.set_label(f"{n} days in a row" if n >= 2 else "")
+        self.streak_lbl.set_visible(n >= 2)
         (self.streak_lbl.add_css_class if self.state.get("complete") else self.streak_lbl.remove_css_class)("plus")
         unlocked = {k for k, days, _ in catmod.UNLOCKS if info["best"] >= days}
         new = unlocked - catmod.UNLOCKED
