@@ -5,8 +5,12 @@ Plassering: ~/.local/share/morgen-todo/morgen-todo.db som standard. Kan overstyr
 Ligger databasen på en nettverksdisk (CIFS/NFS/SSHFS), brukes lock-filer i stedet for vanlig
 SQLite-låsing, og gjenglemte låser etter et krasj ryddes bort automatisk.
 """
+import csv
 import json
 import os
+import shutil
+import tempfile
+import zipfile
 from contextlib import contextmanager
 import queue
 import sqlite3
@@ -292,6 +296,79 @@ def summary(day):
         row = conn.execute("SELECT value FROM settings WHERE key = 'opening_balance'").fetchone()
     opening = row[0] if row else 0
     return {"opening_balance": opening, "total": total + opening, "week": week, "month": month, "days_logged": days}
+
+
+# --- Sikkerhetskopi og eksport ---
+BACKUP_CONFIG = ["config.json", "cat.json", "theme", "pomodoro-settings.json", "pomodoro.json"]
+
+
+def export_backup(path):
+    """Zip med en konsistent kopi av databasen og innstillingsfilene."""
+    with tempfile.TemporaryDirectory() as tmp:
+        snap = Path(tmp) / "morgen-todo.db"
+        src, dst = connect(), sqlite3.connect(snap)
+        try:
+            src.backup(dst)
+        finally:
+            dst.close()
+            src.close()
+        with zipfile.ZipFile(path, "w", zipfile.ZIP_DEFLATED) as z:
+            z.write(snap, "morgen-todo.db")
+            for name in BACKUP_CONFIG:
+                if (CONFIG_DIR / name).exists():
+                    z.write(CONFIG_DIR / name, f"config/{name}")
+            z.writestr("README.txt", "Morning Routine backup. Restore it under ⚙ → backup → restore.\n")
+    return str(path)
+
+
+def restore_backup(path):
+    """Erstatt databasen og innstillingene med en sikkerhetskopi. Den nåværende databasen
+    lagres først som <navn>.before-restore.db. Hvor databasen ligger (db_path) beholdes."""
+    with zipfile.ZipFile(path) as z, tempfile.TemporaryDirectory() as tmp:
+        names = z.namelist()
+        if "morgen-todo.db" not in names:
+            raise ValueError("this is not a Morning Routine backup")
+        z.extract("morgen-todo.db", tmp)
+        incoming = sqlite3.connect(Path(tmp) / "morgen-todo.db")
+        try:
+            incoming.execute("SELECT count(*) FROM days").fetchone()  # er det en gyldig database?
+            if DB_PATH.exists():
+                shutil.copy2(DB_PATH, DB_PATH.with_name(DB_PATH.stem + ".before-restore.db"))
+            target = connect()
+            try:
+                incoming.backup(target)
+            finally:
+                target.close()
+        finally:
+            incoming.close()
+        CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+        for name in BACKUP_CONFIG:
+            if f"config/{name}" not in names:
+                continue
+            data = z.read(f"config/{name}")
+            if name == "config.json":
+                restored, current = json.loads(data), load_config()
+                if "db_path" in current:
+                    restored["db_path"] = current["db_path"]
+                else:
+                    restored.pop("db_path", None)
+                data = json.dumps(restored, indent=2).encode()
+            (CONFIG_DIR / name).write_bytes(data)
+
+
+def export_hours_csv(path):
+    """Alle førte timer som CSV (til timelister)."""
+    with session() as conn:
+        rows = conn.execute(
+            """SELECT date, hours, COALESCE(expected, ?), day_off FROM days
+               WHERE hours IS NOT NULL ORDER BY date""", (EXPECTED_HOURS,)).fetchall()
+    with open(path, "w", newline="") as f:
+        w = csv.writer(f)
+        w.writerow(["date", "weekday", "hours", "expected", "overtime", "day_off"])
+        for d, hours, expected, day_off in rows:
+            w.writerow([d, date.fromisoformat(d).strftime("%A"), hours, expected, round(hours - expected, 2),
+                        "yes" if day_off else ""])
+    return len(rows)
 
 
 class Worker:

@@ -70,6 +70,29 @@ class DbTest(unittest.TestCase):
         self.assertEqual(db.streak_info(tue, True), {"streak": 3, "best": 3})
         self.assertEqual(db.streak_info(tue + timedelta(days=2), False), {"streak": 0, "best": 3})  # onsdag mangler
 
+    def test_backup_restore_and_csv(self):
+        db.save_day(MON, state(hours=9, routine=[{"id": "a", "text": "Water"}]))
+        (db.CONFIG_DIR).mkdir(parents=True, exist_ok=True)
+        (db.CONFIG_DIR / "theme").write_text("dark")
+        zip_path = env.TMP / "backup.zip"
+        db.export_backup(zip_path)
+        db.save_day(MON, state(hours=1, routine=[]))                 # endringer etter kopien
+        (db.CONFIG_DIR / "theme").write_text("light")
+        db.restore_backup(zip_path)
+        d = db.load_day(MON)
+        self.assertEqual((d["hours"], d["routine"][0]["text"]), (9, "Water"))
+        self.assertEqual((db.CONFIG_DIR / "theme").read_text(), "dark")
+        self.assertTrue(db.DB_PATH.with_name(db.DB_PATH.stem + ".before-restore.db").exists())
+        csv_path = env.TMP / "hours.csv"
+        self.assertEqual(db.export_hours_csv(csv_path), 1)
+        self.assertIn("2026-10-12,Monday,9.0,8.0,1.0,", csv_path.read_text())
+        bad = env.TMP / "bad.zip"
+        import zipfile
+        with zipfile.ZipFile(bad, "w") as z:
+            z.writestr("x.txt", "nope")
+        with self.assertRaises(ValueError):
+            db.restore_backup(bad)
+
     def test_stale_lock_removed_fresh_kept(self):
         import os, time
         lock = env.TMP / "x.db.lock"

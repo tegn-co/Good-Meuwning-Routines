@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
 """Lite, flyttbart morgen-todo-vindu (GTK4). Lagrer i SQLite via db.py (se der for hvor databasen ligger)."""
 import json
+import os
 import random
 import sys
+import threading
 import uuid
 from datetime import date, datetime, timedelta
 from pathlib import Path
@@ -21,6 +23,7 @@ import cat as catmod  # noqa: E402
 import db  # noqa: E402
 import schedule  # noqa: E402
 from onboarding import Onboarding  # noqa: E402
+import updates  # noqa: E402
 
 SAVE_DELAY = 10  # sekunder uten endringer før lagring
 MAIN_H = 600  # vinduet starter alltid i MAIN_W × MAIN_H med sidepanelet lukket
@@ -173,6 +176,23 @@ class Widget(Adw.ApplicationWindow):
         root.append(self.overlay)
         self.set_content(root)
 
+        # Banner når en nyere versjon finnes (se check_for_update)
+        bar = Gtk.Box(spacing=6, margin_top=8)
+        bar.add_css_class("planbox")
+        self.update_lbl = label("", "detail", wrap=True)
+        self.update_lbl.set_hexpand(True)
+        bar.append(self.update_lbl)
+        self.update_btn = Gtk.Button(label="update", valign=Gtk.Align.CENTER)
+        self.update_btn.add_css_class("flat")
+        self.update_btn.connect("clicked", self.on_update_clicked)
+        bar.append(self.update_btn)
+        close = Gtk.Button(label="×", valign=Gtk.Align.CENTER, tooltip_text="Not now")
+        close.add_css_class("flat")
+        close.connect("clicked", lambda _: self.update_bar.set_reveal_child(False))
+        bar.append(close)
+        self.update_bar = Gtk.Revealer(child=bar)
+        body.append(self.update_bar)
+
         # Tittelen «good morning» med pixel-katten som lever oppå bokstavene
         self.title_cat = TitleCat(palette, forced=cat)
         body.append(self.title_cat)
@@ -303,6 +323,7 @@ class Widget(Adw.ApplicationWindow):
         self.load()
 
         self.apply_schedule(schedule.load())
+        GLib.timeout_add_seconds(5, self.check_for_update)  # og deretter én gang om dagen via check_clock
         # Sjekk veggklokka hvert 30. sekund (en vanlig timer stopper når maskinen sover)
         GLib.timeout_add_seconds(30, self.check_clock)
 
@@ -357,6 +378,7 @@ class Widget(Adw.ApplicationWindow):
     def check_clock(self):
         self.check_new_day()
         self.mood()
+        self.check_for_update()
         if self.close_at is None or datetime.now() < self.close_at:
             return True
         # Lagre først; lukk bare hvis lagringen gikk bra, ellers prøv igjen om 30 sekunder
@@ -688,7 +710,170 @@ class Widget(Adw.ApplicationWindow):
         self.past_status = label("", "detail", "muted", wrap=True)
         page.append(self.past_status)
         GLib.idle_add(lambda: self.on_past_day_selected(self.past_cal) and False)
+
+        # Sikkerhetskopi og eksport
+        heading = label("backup", "num")
+        heading.set_margin_top(14)
+        page.append(heading)
+        buttons = Gtk.Box(spacing=4)
+        for text, handler in (("export…", self.on_export_backup), ("restore…", self.on_restore_backup),
+                              ("hours as CSV…", self.on_export_csv)):
+            b = Gtk.Button(label=text)
+            b.add_css_class("flat")
+            b.connect("clicked", handler)
+            buttons.append(b)
+        page.append(buttons)
+        self.backup_status = label("", "detail", "muted", wrap=True)
+        page.append(self.backup_status)
+
+        # Oppdateringer
+        heading = label("updates", "num")
+        heading.set_margin_top(14)
+        page.append(heading)
+        version = updates.installed_version()
+        page.append(label(f"version {version}" if version else "running from source", "detail", "muted"))
+        self.check_updates = Gtk.CheckButton(label="check for new versions", active=db.load_config().get("check_updates", True))
+        self.check_updates.add_css_class("detail")
+        self.check_updates.connect("toggled", lambda b: db.update_config(check_updates=b.get_active()))
+        page.append(self.check_updates)
         return page
+
+    # --- sikkerhetskopi ---
+    def choose_file(self, title, save_name, on_chosen, pattern=None):
+        dialog = Gtk.FileDialog(title=title, modal=True)
+        if pattern:
+            f = Gtk.FileFilter()
+            f.add_pattern(pattern)
+            store = Gio.ListStore.new(Gtk.FileFilter)
+            store.append(f)
+            dialog.set_filters(store)
+
+        def done(d, result):
+            try:
+                gfile = d.save_finish(result) if save_name else d.open_finish(result)
+            except GLib.Error:
+                return  # avbrutt
+            on_chosen(gfile.get_path())
+
+        if save_name:
+            dialog.set_initial_name(save_name)
+            dialog.save(self, None, done)
+        else:
+            dialog.open(self, None, done)
+
+    def on_export_backup(self, _):
+        def chosen(path):
+            self.backup_status.set_label("saving backup…")
+            self.db.submit(db.export_backup, path, callback=lambda r, e: self.backup_status.set_label(
+                f"could not save – {e}" if e else f"backup saved: {path}"))
+        self.choose_file("Save backup", f"morning-routine-backup-{date.today()}.zip", chosen)
+
+    def on_export_csv(self, _):
+        def chosen(path):
+            self.db.submit(db.export_hours_csv, path, callback=lambda n, e: self.backup_status.set_label(
+                f"could not save – {e}" if e else f"{n} days of hours saved: {path}"))
+        self.choose_file("Save hours", f"hours-{date.today()}.csv", chosen)
+
+    def on_restore_backup(self, _):
+        def chosen(path):
+            alert = Adw.AlertDialog(heading="Restore this backup?",
+                                    body="Your current list, hours and settings are replaced by the backup. "
+                                         "A copy of the current database is kept next to it.")
+            alert.add_response("cancel", "Cancel")
+            alert.add_response("restore", "Restore")
+            alert.set_response_appearance("restore", Adw.ResponseAppearance.DESTRUCTIVE)
+            alert.connect("response", lambda _, r: r == "restore" and self.restore_from(path))
+            alert.present(self)
+        self.choose_file("Restore backup", None, chosen, pattern="*.zip")
+
+    def restore_from(self, path):
+        if self.save_id:  # ingen ventende lagring skal skrive over kopien etterpå
+            GLib.source_remove(self.save_id)
+            self.save_id = 0
+        self.loaded = False
+        self.backup_status.set_label("restoring…")
+
+        def done(_, err):
+            if err:
+                self.backup_status.set_label(f"could not restore – {err}")
+                self.load()
+                return
+            self.restart()  # innstillinger (katt, tema, tider) leses ved oppstart
+
+        self.db.submit(db.restore_backup, path, callback=done)
+
+    def restart(self):
+        """Start appen på nytt (etter gjenoppretting eller oppdatering)."""
+        if self.loaded:
+            self.on_close(None)
+        os.execv(sys.executable, [sys.executable, str(Path(__file__).resolve())])
+
+    # --- oppdateringer ---
+    def check_for_update(self):
+        cfg = db.load_config()
+        if not cfg.get("check_updates", True) or cfg.get("update_checked") == str(date.today()):
+            return False
+        db.update_config(update_checked=str(date.today()))
+
+        def done(result, err):
+            if err or not result:
+                return
+            current, latest = result
+            if db.load_config().get("skip_version") == latest:
+                return
+            self.update_latest = latest
+            self.update_lbl.set_label(f"Version {latest} is available (you have {current}).")
+            self.update_btn.set_sensitive(True)
+            self.update_btn.set_label("update")
+            self.update_bar.set_reveal_child(True)
+
+        threading.Thread(target=lambda: self.fetch(updates.newer_available, done), daemon=True).start()
+        return False
+
+    def fetch(self, fn, callback):
+        """Kjør fn på en egen tråd (nettverk skal ikke holde opp databasekøen) og svar på GTK-tråden."""
+        try:
+            result, err = fn(), None
+        except Exception as e:  # noqa: BLE001
+            result, err = None, e
+        GLib.idle_add(lambda: callback(result, err) and False)
+
+    def on_update_clicked(self, btn):
+        if btn.get_label() == "restart":
+            self.restart()
+            return
+        btn.set_sensitive(False)
+        self.update_lbl.set_label("Downloading…")
+
+        def downloaded(path, err):
+            if err:
+                self.update_lbl.set_label(f"Download failed – {err}")
+                btn.set_sensitive(True)
+                return
+            cmd = updates.install_command(path)
+            if not cmd:
+                self.update_lbl.set_label(f"Run this in a terminal to update:\n{updates.INSTALL_COMMAND}")
+                return
+            self.update_lbl.set_label("Installing – enter your password in the dialog…")
+            proc = Gio.Subprocess.new(cmd, Gio.SubprocessFlags.NONE)
+
+            def finished(p, res):
+                try:
+                    ok = p.wait_check_finish(res)
+                except GLib.Error:
+                    ok = False
+                if ok:
+                    self.update_lbl.set_label(f"Updated to {self.update_latest}. Restart to use it.")
+                    btn.set_label("restart")
+                else:
+                    self.update_lbl.set_label("Not updated (cancelled or failed). Try again, or run:\n"
+                                              + updates.INSTALL_COMMAND)
+                    btn.set_label("update")
+                btn.set_sensitive(True)
+
+            proc.wait_check_async(None, finished)
+
+        threading.Thread(target=lambda: self.fetch(updates.download, downloaded), daemon=True).start()
 
     def build_schedule(self):
         """⚙ → schedule: når listen åpnes, påminnelser, lukketid, lunsj og ukedager."""

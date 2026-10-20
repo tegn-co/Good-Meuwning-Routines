@@ -62,8 +62,9 @@ One command – downloads the latest release and installs it:
 curl -fsSL https://raw.githubusercontent.com/tegn-co/Good-Meuwning-Routines/main/install.sh | sh
 ```
 
-Then open **Morning Routine** from the app menu. Run the same command again to update –
-your data stays where it is.
+Then open **Morning Routine** from the app menu. When a new version is out, the app tells you
+and updates itself with one click (you type your password once). You can also just run the same
+command again – your data stays where it is.
 
 <details>
 <summary>Prefer to do it by hand?</summary>
@@ -101,6 +102,9 @@ Every user starts with a fresh, local database – nothing is shared or uploaded
 |---|---|
 | Checklist, plan, hours | `~/.local/share/morgen-todo/morgen-todo.db` |
 | Settings (work day, schedule, cat, theme) | `~/.config/morgen-todo/` |
+
+Under **⚙ → backup** you can export everything to a single .zip, restore it later (or on another
+machine), and export your hours as CSV for your timesheet.
 
 Want the database somewhere else, e.g. on a network drive? Set `"db_path"` in
 `~/.config/morgen-todo/config.json` or the `MORGEN_TODO_DB` environment variable.

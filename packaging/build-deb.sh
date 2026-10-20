@@ -13,9 +13,12 @@ install -d "$ROOT/DEBIAN" "$ROOT/usr/share/morgen-todo" "$ROOT/usr/bin" "$ROOT/u
   "$ROOT/usr/lib/systemd/user" "$ROOT/usr/share/applications" "$ROOT/usr/share/fonts/truetype/morgen-todo" \
   "$ROOT/usr/share/doc/morgen-todo" "$ROOT/usr/share/icons/hicolor"
 
-for f in widget.py cat.py cat_settings.py pomodoro.py db.py schedule.py onboarding.py; do
+for f in widget.py cat.py cat_settings.py pomodoro.py db.py schedule.py onboarding.py updates.py; do
   install -m 644 "$SRC/$f" "$ROOT/usr/share/morgen-todo/$f"
 done
+# Versjonen appen sammenligner med GitHub når den ser etter oppdateringer
+echo "$VERSION" > "$ROOT/usr/share/morgen-todo/VERSION"
+chmod 644 "$ROOT/usr/share/morgen-todo/VERSION"
 install -m 755 "$HERE/files/morgen-todo" "$ROOT/usr/bin/morgen-todo"
 install -m 755 "$HERE/files/morgen-todo-remind" "$ROOT/usr/lib/morgen-todo/morgen-todo-remind"
 install -m 644 "$HERE/files/morgen-todo.service" "$HERE/files/morgen-todo-hours.service" \
@@ -45,7 +48,8 @@ Section: utils
 Priority: optional
 Architecture: all
 Installed-Size: $SIZE
-Depends: python3 (>= 3.10), python3-gi, python3-gi-cairo, python3-cairo, gir1.2-gtk-4.0 (>= 4.12), gir1.2-adw-1 (>= 1.4), libnotify-bin, fontconfig
+Depends: python3 (>= 3.10), python3-gi, python3-gi-cairo, python3-cairo, gir1.2-gtk-4.0 (>= 4.12), gir1.2-adw-1 (>= 1.5), libnotify-bin, fontconfig
+Recommends: pkexec
 Maintainer: John Thein <john.thein@zivid.com>
 Description: Morning checklist with a pixel cat
  Morning Routine opens a small window every morning with a checklist,

@@ -85,6 +85,22 @@ class AppTest(unittest.TestCase):
             check(need <= W.MAIN_W, f"the list needs {need} px, more than the {W.MAIN_W} px window")
 
         @step
+        def update_banner(w):
+            import updates
+            self.real_newer = updates.newer_available
+            updates.newer_available = lambda: ("1.1.1", "9.9.9")
+            db.update_config(update_checked=None)
+            w.check_for_update()
+
+        @step
+        def update_banner_shown(w):
+            check(w.update_bar.get_reveal_child() and "9.9.9" in w.update_lbl.get_label(),
+                  f"update banner not shown: {w.update_lbl.get_label()!r}")
+            w.update_bar.set_reveal_child(False)
+            import updates
+            updates.newer_available = self.real_newer
+
+        @step
         def side_panels(w):
             for b in (w.cat_btn, w.settings_btn, w.pomo_btn, w.side_btn):
                 b.set_active(True)
