@@ -4,7 +4,10 @@ Velg rase, juster fargen på hver del av katten (også konturen), og endre hva k
 Katten i tittelen oppdateres med en gang, så den fungerer som forhåndsvisning.
 Alt lagres i ~/.config/morgen-todo/cat.json.
 """
-from gi.repository import Gdk, Gtk
+import gi
+
+gi.require_version("Gtk", "4.0")
+from gi.repository import Gdk, Gtk  # noqa: E402
 
 import cat
 

@@ -8,16 +8,20 @@ leker i pausene og spiser i den lange pausen. Når klokka står, gjør den som v
 import json
 import subprocess
 from datetime import date, datetime, timedelta
-from pathlib import Path
 
-from gi.repository import GLib, Gtk
+import gi
+
+gi.require_version("Gtk", "4.0")
+from gi.repository import GLib, Gtk  # noqa: E402
+
+import db  # noqa: E402
 
 # Standardverdier; brukerens egne ligger i SETTINGS_FILE. "rounds" = lang pause etter så mange fokusøkter
 DEFAULTS = {"focus": 25, "short": 5, "long": 15, "rounds": 4}
 # Innstillingene i panelet: nøkkel, tekst, min, maks
 FIELDS = [("focus", "focus min", 1, 120), ("short", "break min", 1, 60), ("long", "long break min", 1, 90),
           ("rounds", "rounds before long", 2, 8)]
-CONFIG_DIR = Path.home() / ".config" / "morgen-todo"
+CONFIG_DIR = db.CONFIG_DIR
 STATS_FILE = CONFIG_DIR / "pomodoro.json"  # antall fullførte økter i dag
 SETTINGS_FILE = CONFIG_DIR / "pomodoro-settings.json"
 

@@ -52,7 +52,7 @@ Description: Morning checklist with a pixel cat
  with an animated pixel cat living on the title.
  Each user gets a fresh local database in ~/.local/share/morgen-todo.
 CTRL
-install -m 755 "$HERE/files/postinst" "$HERE/files/postrm" "$ROOT/DEBIAN/"
+install -m 755 "$HERE/files/postinst" "$HERE/files/prerm" "$HERE/files/postrm" "$ROOT/DEBIAN/"
 
 mkdir -p "$OUT"
 dpkg-deb --root-owner-group -Zxz --build "$ROOT" "$OUT/morgen-todo_${VERSION}_all.deb" >/dev/null

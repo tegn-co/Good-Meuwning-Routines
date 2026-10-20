@@ -5,6 +5,6 @@ Comment=Morning checklist, day plan, hours and a pomodoro timer – with a pixel
 Exec=morgen-todo
 Icon=no.zivid.MorgenTodo
 Terminal=false
-Categories=Office;Utility;
+Categories=Utility;
 Keywords=todo;checklist;pomodoro;hours;overtime;cat;
 StartupNotify=true

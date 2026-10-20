@@ -22,6 +22,7 @@ import schedule  # noqa: E402
 from onboarding import Onboarding  # noqa: E402
 
 SAVE_DELAY = 10  # sekunder uten endringer før lagring
+MAIN_H = 600  # vinduet starter alltid i MAIN_W × MAIN_H med sidepanelet lukket
 MAIN_W, SIDE_W = 360, 317  # bredde på hovedlisten og plan-panelet (inkl. marger og kant)
 
 ITEMS = [
@@ -75,7 +76,7 @@ PALETTES = {
     "light": {"bg": "#f4f4f0", "fg": "#111111", "muted": "#8a8a85", "line": "#dcdcd6", "accent": "#ff4f1f"},
     "dark": {"bg": "#0e0e0e", "fg": "#ededea", "muted": "#6b6b66", "line": "#262624", "accent": "#ff6a3d"},
 }
-THEME_FILE = Path.home() / ".config" / "morgen-todo" / "theme"
+THEME_FILE = db.CONFIG_DIR / "theme"
 THEMES = [("system", "◐", Adw.ColorScheme.DEFAULT), ("light", "☀", Adw.ColorScheme.FORCE_LIGHT), ("dark", "☾", Adw.ColorScheme.FORCE_DARK)]
 
 
@@ -92,7 +93,7 @@ def label(text, *classes, wrap=False):
 
 class Widget(Adw.ApplicationWindow):
     def __init__(self, app, cat=None):
-        super().__init__(application=app, title="Morning Routine", default_width=MAIN_W, default_height=600)
+        super().__init__(application=app, title="Morning Routine", default_width=MAIN_W, default_height=MAIN_H)
         self.state = {"checks": {}, "plan": "", "meetings": [], "hours": None, "day_off": False, "routine": [], "order": [], "hidden": []}
         self.save_id = 0
         self.loading = True
@@ -362,7 +363,6 @@ class Widget(Adw.ApplicationWindow):
         self.render_meetings()
         self.render_routine()
         self.render_plan_items()
-        self.side_btn.set_active(bool(self.plan_items()))
         self.hours.set_value(self.state["hours"] or 0)
         self.day_off.set_active(self.state["day_off"])
         self.loading = False

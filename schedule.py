@@ -9,6 +9,7 @@ Lagres under "schedule" i ~/.config/morgen-todo/config.json:
 Endringer skrives inn i timerne med apply_timers().
 """
 import json
+import os
 import subprocess
 from datetime import time as dtime
 from pathlib import Path
@@ -24,7 +25,7 @@ DEFAULTS = {
     "hours_days": [0, 1, 2, 3, 4],
 }
 DAY_NAMES = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
-TIMER_DIR = Path.home() / ".config" / "systemd" / "user"
+TIMER_DIR = Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config")) / "systemd" / "user"
 TIMERS = {  # innstilling -> (timer-fil, beskrivelse, Persistent)
     "morning": ("morgen-todo.timer", "Morgen-todo: åpne listen", True),
     # Påminnelsen hoppes over hvis maskinen var av, ellers kunne den kommet neste morgen

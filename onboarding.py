@@ -2,7 +2,11 @@
 (arbeidstid, overtid man allerede har, påminnelser og om appen skal festes i oppgavelinja).
 Kan vises igjen fra ⚙ → show tutorial.
 """
-from gi.repository import Adw, Gio, GLib, Gtk
+import gi
+
+gi.require_version("Gtk", "4.0")
+gi.require_version("Adw", "1")
+from gi.repository import Adw, Gio, GLib, Gtk  # noqa: E402
 
 import db
 import schedule

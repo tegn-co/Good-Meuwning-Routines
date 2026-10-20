@@ -34,6 +34,8 @@ gi.require_version("PangoCairo", "1.0")
 gi.require_version("Graphene", "1.0")
 from gi.repository import GLib, Graphene, Gtk, Pango, PangoCairo  # noqa: E402
 
+from db import CONFIG_DIR  # noqa: E402  (samme innstillingsmappe som resten av appen, følger XDG_CONFIG_HOME)
+
 PX = 2  # skjermpiksler per sprite-piksel
 FPS = 24  # oppdateringer i sekundet når katten beveger seg (jevnt nok for pikselgrafikk)
 CALM_FPS = 8  # når den sover, sitter eller spiser og ingen bokstaver spretter
@@ -45,7 +47,7 @@ ANIMATIONS = ["walk", "play", "sleep", "sit", "jump", "climb"]
 LUNCH = (11 * 60, 12 * 60)  # lunsj fra–til i minutter etter midnatt (settes fra ⚙ → schedule)
 TITLE = "good morning"  # standardtittel; TitleCat(title=...) kan bruke en annen
 # --- Utseende og replikker (kan endres i katteinnstillingene, lagres i CAT_FILE) ---
-CAT_FILE = Path.home() / ".config" / "morgen-todo" / "cat.json"
+CAT_FILE = CONFIG_DIR / "cat.json"
 # Delene av katten som kan farges: nøkkel i spritene, navn i innstillingene
 PARTS = [("b", "fur"), ("s", "stripes"), ("w", "chest & paws"), ("p", "nose & ears"), ("e", "eyes"), ("o", "outline")]
 BREEDS = {
