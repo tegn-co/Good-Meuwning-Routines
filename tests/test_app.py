@@ -160,6 +160,8 @@ class AppTest(unittest.TestCase):
             check(r.mode == "title", "playtime started before 5 clicks")
             t.on_click(None, 1, bx + bw / 2, by + bh / 2)
             check(r.play_until > 0, "5 clicks on the cat did not start playtime")
+            import time as _time
+            check(abs(r.play_until - _time.monotonic() - cat.PLAYTIME_SECONDS) < 1, "playtime should last 30 s")
             r.pointer = (r.area_w() - 40, r.area_h() - 40)
 
         @step

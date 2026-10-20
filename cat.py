@@ -42,6 +42,7 @@ from db import CONFIG_DIR  # noqa: E402  (samme innstillingsmappe som resten av 
 from i18n import _  # noqa: E402
 
 PX = 2  # skjermpiksler per sprite-piksel
+PLAYTIME_SECONDS = 30  # så lenge katten leker med musepekeren før den går tilbake til tittelen
 FPS = 24  # oppdateringer i sekundet når katten beveger seg (jevnt nok for pikselgrafikk)
 CALM_FPS = 8  # når den sover, sitter eller spiser og ingen bokstaver spretter
 # En vanlig GLib-timer i stedet for add_tick_callback: tick-callback holder GTKs bildeklokke på 60 Hz
@@ -1051,7 +1052,7 @@ class CatRoamer(Gtk.DrawingArea):
 
     def start_playtime(self):
         now = time.monotonic()
-        self.play_until = now + 60
+        self.play_until = now + PLAYTIME_SECONDS
         self.play_wait, self.play_catches = 0.0, 0
         self.title.away = True
         self.title.say(_(random.choice(["playtime!", "mrrrow!", "let's play!"])), 2)
