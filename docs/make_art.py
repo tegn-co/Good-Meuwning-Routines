@@ -25,7 +25,8 @@ P = 4  # skjermpiksler per sprite-piksel i bildene
 
 
 def sprite(name, frame=0, breed="orange tabby", shape="normal"):
-    return cat.outline(cat.SHAPES[shape](cat.FILL[name][frame])), dict(cat.BREEDS[breed], c="#5aa9e6", f="#9a5b2e")
+    # Alle fargene (skål, sommerfugl, tilbehør) + rasens pels, uansett hva katten er tilpasset til lokalt
+    return cat.outline(cat.SHAPES[shape](cat.FILL[name][frame])), dict(cat.COLORS, **cat.BREEDS[breed])
 
 
 def blit(cr, rows, colors, x, y, px=P, flip=False, alpha=1.0):
@@ -92,6 +93,34 @@ def single(name, frame, file, extra=None, w=200, h=120):
     surf.write_to_png(str(HERE / file))
 
 
+def butterfly():
+    surf, cr = canvas(200, 130, bg=False)
+    rows, colors = sprite("run", 0)
+    blit(cr, rows, colors, 40, 130 - 8 - cat.size(rows)[1] * P - 20)  # midt i hoppet
+    blit(cr, cat.BUTTERFLY_SPRITES[0], colors, 135, 18, px=4)
+    surf.write_to_png(str(HERE / "cat-butterfly.png"))
+
+
+def accessories():
+    """Sløyfe, kaffekopp, lue, nisselue og spøkelse."""
+    looks = [({"bowtie"}, "none", False), ({"coffee"}, "none", True), ({"beanie"}, "none", False),
+             (set(), "december", False), (set(), "halloween", False)]
+    surf, cr = canvas(130 * len(looks), 140, bg=False)
+    for i, (unlocked, season, cup) in enumerate(looks):
+        cat.UNLOCKED, cat.SEASON_OVERRIDE = set(unlocked), season
+        cat._DRESSED.clear()
+        rows, base = sprite("sit", 0)
+        rows = cat.dress(rows)
+        colors = dict(cat.active_colors(), **({} if season == "halloween" else cat.BREEDS["orange tabby"]))
+        x, y = i * 130 + 20, 132 - cat.size(rows)[1] * P
+        blit(cr, rows, colors, x, y)
+        if cup:
+            cup_rows = cat.outline(cat.CUP)
+            blit(cr, cup_rows, colors, x + cat.size(rows)[0] * P + 4, 132 - cat.size(cup_rows)[1] * P, px=3)
+    cat.UNLOCKED, cat.SEASON_OVERRIDE = set(), None
+    surf.write_to_png(str(HERE / "accessories.png"))
+
+
 def breeds():
     names = list(cat.BREEDS)
     surf, cr = canvas(110 * len(names), 120, bg=False)
@@ -120,5 +149,9 @@ if __name__ == "__main__":
     single("sit", 2, "cat-sit.png")
     single("sit", 0, "cat-love.png", "heart")
     single("run", 0, "cat-run.png")
+    single("groom", 1, "cat-groom.png")
+    single("stretch", 0, "cat-stretch.png", w=240)
+    butterfly()
+    accessories()
     breeds()
     divider()
