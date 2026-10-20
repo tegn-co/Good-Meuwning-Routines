@@ -10,21 +10,21 @@ class ScheduleTest(unittest.TestCase):
     def test_full_timer_without_package(self):
         sch = dict(schedule.DEFAULTS, morning="08:07", hours_days=[0, 2])
         schedule.apply_reminders(sch)
-        text = (schedule.TIMER_DIR / "morgen-todo-hours.timer").read_text()
+        text = (schedule.TIMER_DIR / "morgen-todo-hours.timer").read_text(encoding="utf-8")
         self.assertIn("OnCalendar=Mon,Wed 15:00", text)
-        self.assertIn("OnCalendar=Mon,Tue,Wed,Thu,Fri 08:07", (schedule.TIMER_DIR / "morgen-todo.timer").read_text())
+        self.assertIn("OnCalendar=Mon,Tue,Wed,Thu,Fri 08:07", (schedule.TIMER_DIR / "morgen-todo.timer").read_text(encoding="utf-8"))
 
     def test_dropin_with_package_and_old_file_removed(self):
         pkg = schedule.PACKAGED_DIR
         pkg.mkdir(parents=True, exist_ok=True)
         for unit in ("morgen-todo.timer", "morgen-todo-hours.timer"):
-            (pkg / unit).write_text("[Timer]\n")
+            (pkg / unit).write_text("[Timer]\n", encoding="utf-8")
         schedule.TIMER_DIR.mkdir(parents=True, exist_ok=True)
-        (schedule.TIMER_DIR / "morgen-todo.timer").write_text("[Unit]\nDescription=Morgen-todo: old\n")
+        (schedule.TIMER_DIR / "morgen-todo.timer").write_text("[Unit]\nDescription=Morgen-todo: old\n", encoding="utf-8")
         try:
             schedule.apply_reminders(dict(schedule.DEFAULTS))
             self.assertFalse((schedule.TIMER_DIR / "morgen-todo.timer").exists())
-            conf = (schedule.TIMER_DIR / "morgen-todo.timer.d" / "schedule.conf").read_text()
+            conf = (schedule.TIMER_DIR / "morgen-todo.timer.d" / "schedule.conf").read_text(encoding="utf-8")
             self.assertEqual(conf, "[Timer]\nOnCalendar=\nOnCalendar=Mon,Tue,Wed,Thu,Fri 08:00\n")
         finally:
             for p in pkg.iterdir():

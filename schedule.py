@@ -47,7 +47,7 @@ def save(schedule):
     config = db.load_config()
     config["schedule"] = schedule
     db.CONFIG_DIR.mkdir(parents=True, exist_ok=True)
-    db.CONFIG_FILE.write_text(json.dumps(config, indent=2))
+    db.CONFIG_FILE.write_text(json.dumps(config, indent=2), encoding="utf-8")
 
 
 def parse_hhmm(hhmm):
@@ -82,18 +82,19 @@ def apply_reminders(schedule):
         if (PACKAGED_DIR / unit).exists():
             # Installed package: the timer comes from the package; we only put the time in a drop-in.
             # If the package is removed, the timer goes with it instead of pointing at nothing.
-            if own.exists() and own.read_text().startswith(("[Unit]\nDescription=Morgen-todo:", "[Unit]\nDescription=Morning Routine:")):
+            if own.exists() and own.read_text(encoding="utf-8").startswith(("[Unit]\nDescription=Morgen-todo:", "[Unit]\nDescription=Morning Routine:")):
                 own.unlink()  # full timer file written by older versions
             dropin = TIMER_DIR / f"{unit}.d" / "schedule.conf"
             dropin.parent.mkdir(exist_ok=True)
-            dropin.write_text(f"[Timer]\nOnCalendar=\nOnCalendar={days} {schedule[key]}\n")
+            dropin.write_text(f"[Timer]\nOnCalendar=\nOnCalendar={days} {schedule[key]}\n", encoding="utf-8")
         else:
             # Running from source: write the whole timer
             own.write_text(
                 f"[Unit]\nDescription={description}\n\n"
                 f"[Timer]\nOnCalendar={days} {schedule[key]}\n"
                 + ("Persistent=true\n" if persistent else "")
-                + "\n[Install]\nWantedBy=timers.target\n"
+                + "\n[Install]\nWantedBy=timers.target\n",
+                encoding="utf-8",
             )
     systemctl("daemon-reload")
     for key, (unit, _, _) in TIMERS.items():

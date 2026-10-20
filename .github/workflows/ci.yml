@@ -3,7 +3,7 @@ name: Tests
 
 on:
   push:
-    branches: [main]
+    branches: ["**"]  # every branch, so feature branches are tested before they are merged
   pull_request:
 
 jobs:

@@ -6,7 +6,7 @@
 
 ---
 
-**Morning Routine** is a tiny Linux desktop app that pops up every morning with your checklist,
+**Morning Routine** is a tiny desktop app for Linux and Windows that pops up every morning with your checklist,
 helps you plan the day, keeps track of your hours and overtime, runs a pomodoro timer – and has a
 pixel cat living on top of the title. The cat walks on the letters, hops over the spaces, naps,
 eats lunch, chases butterflies and cheers when you check things off.
@@ -67,6 +67,16 @@ The animation changes every 15 minutes. Check something off and it says **good j
 
 ## Install
 
+### Windows 10 / 11
+
+Download **`MorningRoutine-Setup.exe`** from the
+[latest release](https://github.com/tegn-co/Good-Meuwning-Routines/releases/latest) and run it.
+It installs for your user only (no admin needed) and adds Morning Routine to the Start menu.
+Windows may show a SmartScreen warning the first time, because the installer isn't code-signed –
+click *More info → Run anyway*.
+
+### Linux
+
 One command – downloads the latest release and installs it:
 
 ```sh
@@ -92,9 +102,9 @@ Or read [`install.sh`](install.sh) first – it only picks one of these and inst
 
 ### Updating
 
-The .deb version checks for new releases once a day and shows a banner – click **update**, type your
-password, restart. (You can turn the check off under ⚙.) For the Flatpak, or any time you like, just
-run the install command again. Your data stays where it is.
+The Windows and .deb versions check for new releases once a day and show a banner – click **update**
+(on Linux you type your password; on Windows the installer runs and the app restarts). You can turn the
+check off under ⚙. For the Flatpak, run the install command again. Your data stays where it is.
 
 ### First start
 
@@ -116,10 +126,10 @@ app ever fetches are the weather (only the coordinates of the city you picked ar
 [open-meteo.com](https://open-meteo.com), and only if you pick one) and, for the .deb, the latest
 version number from GitHub.
 
-| What | .deb | Flatpak |
-|---|---|---|
-| Checklist, plan, hours | `~/.local/share/morgen-todo/` | `~/.var/app/no.zivid.MorgenTodo/data/morgen-todo/` |
-| Settings (work day, schedule, cat, theme) | `~/.config/morgen-todo/` | `~/.var/app/no.zivid.MorgenTodo/config/morgen-todo/` |
+| What | Windows | Linux .deb | Linux Flatpak |
+|---|---|---|---|
+| Checklist, plan, hours | `%LOCALAPPDATA%\Morning Routine\` | `~/.local/share/morgen-todo/` | `~/.var/app/no.zivid.MorgenTodo/data/morgen-todo/` |
+| Settings (work day, schedule, cat, theme) | `%APPDATA%\Morning Routine\` | `~/.config/morgen-todo/` | `~/.var/app/no.zivid.MorgenTodo/config/morgen-todo/` |
 
 Under **⚙ → backup** you can export everything to a single .zip, restore it later (or on another
 machine), and export your hours as CSV for your timesheet.
@@ -149,8 +159,11 @@ Run the tests (they use temporary folders and never touch your real data):
 python3 -m unittest discover -s tests -t . -v
 ```
 
-Release a new version – GitHub Actions runs the tests, builds the .deb and the .flatpak, checks that
-both install, and publishes the release. Nothing is released if a test fails:
+Work on a branch and merge to `main` when the checks are green – every push runs the tests on Linux
+and Windows, and changes to Windows files also build and test the Windows installer.
+
+Release a new version – GitHub Actions runs the tests, builds the .deb, the .flatpak and the Windows
+installer, checks that each one installs, and publishes the release. Nothing is released if a test fails:
 
 ```sh
 git tag v1.4.0 && git push origin v1.4.0
@@ -161,6 +174,8 @@ Or build the packages locally:
 ```sh
 ./packaging/build-deb.sh 1.4.0      # -> packaging/dist/morgen-todo_1.4.0_all.deb
 flatpak-builder --user --install build packaging/flatpak/no.zivid.MorgenTodo.yml
+# Windows, in an MSYS2 UCRT64 shell with gtk4, libadwaita, python-gobject, python-cairo and pyinstaller:
+packaging/windows/build.sh 1.6.0 && iscc /DAppVersion=1.6.0 packaging/windows/installer.iss
 ```
 
 | File | |
@@ -174,9 +189,10 @@ flatpak-builder --user --install build packaging/flatpak/no.zivid.MorgenTodo.yml
 | `tutorial.py` | first-start tutorial and setup |
 | `updater.py` | checks GitHub for new versions and installs them |
 | `translations.py` | English and Norwegian texts |
+| `platforms.py` | what differs between Linux and Windows (folders, reminders, start at login, fonts) |
 | `weather.py` | today's weather from Open-Meteo, with pixel icons |
 | `tests/` | unit and app tests |
-| `packaging/` | .deb build script, Flatpak manifest, icon generator, fonts |
+| `packaging/` | .deb build script, Flatpak manifest, Windows installer, icon generator, fonts |
 | `docs/` | README art |
 
 Fonts: [Silkscreen](https://github.com/googlefonts/silkscreen) and

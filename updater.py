@@ -24,7 +24,7 @@ def installed_version():
     if platforms.IN_FLATPAK:
         return None  # Flatpak updates via "flatpak update" / a new bundle, not from here
     try:
-        return VERSION_FILE.read_text().strip()
+        return VERSION_FILE.read_text(encoding="utf-8").strip()
     except OSError:
         return None  # running from source
 
