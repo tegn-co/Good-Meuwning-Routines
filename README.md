@@ -23,7 +23,7 @@ eats lunch, chases butterflies and laser dots, hides in boxes and cheers when yo
 | 🌦 **Weather** | Pick your city and today's weather shows under the date – and the cat tells you to take an umbrella. |
 | 🔥 **Streaks** | Finish the whole list several working days in a row – the cat notices and unlocks things to wear. |
 | 🍅 **Pomodoro** | Focus timer with adjustable lengths. The cat sleeps while you work, plays in short breaks and eats in the long one. |
-| 🐈 **The cat** | Eight breeds including a big, fluffy Maine Coon, every color editable, your own looks saved as breeds (Maine Coon or not), and you decide what it says. |
+| 🐈 **The cat** | Eight breeds including a big, fluffy Maine Coon, every color editable, your own looks saved as breeds (Maine Coon or not), a **random** button for a surprise cat, and you decide what it says. Your unsaved custom cat is kept while you try other breeds. |
 | 🕗 **Your schedule** | Choose when the list opens, when you're reminded (and on which weekdays), when it saves & closes, and when the cat has lunch. On Windows and Flatpak the app starts quietly at login so it can open on time. |
 | 💾 **Backup** | Export everything to one .zip, restore it later, and export your hours as CSV for your timesheet. |
 | 🔄 **Updates** | The app tells you when a new version is out and updates itself with one click. |
