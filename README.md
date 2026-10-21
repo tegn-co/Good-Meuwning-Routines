@@ -9,7 +9,7 @@
 **Morning Routine** is a tiny desktop app for Linux and Windows that pops up every morning with your checklist,
 helps you plan the day, keeps track of your hours and overtime, runs a pomodoro timer – and has a
 pixel cat living on top of the title. The cat walks on the letters, hops over the spaces, naps,
-eats lunch, chases butterflies and cheers when you check things off.
+eats lunch, chases butterflies and laser dots, hides in boxes and cheers when you check things off.
 
 <img src="docs/cat-walk.png" alt="" width="120">
 
@@ -22,9 +22,9 @@ eats lunch, chases butterflies and cheers when you check things off.
 | ⏱ **Hours & overtime** | A reminder at 15:00 to log your hours; the overtime balance adds up for you. Weekends and days off expect 0 h, and you can fix past days under ⚙. |
 | 🌦 **Weather** | Pick your city and today's weather shows under the date – and the cat tells you to take an umbrella. |
 | 🔥 **Streaks** | Finish the whole list several working days in a row – the cat notices and unlocks things to wear. |
-| 🍅 **Pomodoro** | Focus timer with adjustable lengths. The cat sleeps while you work and plays in the breaks. |
+| 🍅 **Pomodoro** | Focus timer with adjustable lengths. The cat sleeps while you work, plays in short breaks and eats in the long one. |
 | 🐈 **The cat** | Eight breeds including a big, fluffy Maine Coon, every color editable, your own looks saved as breeds (Maine Coon or not), and you decide what it says. |
-| 🕗 **Your schedule** | Choose when the list opens, when you're reminded (and on which weekdays), when it saves & closes, and when the cat has lunch. |
+| 🕗 **Your schedule** | Choose when the list opens, when you're reminded (and on which weekdays), when it saves & closes, and when the cat has lunch. On Windows and Flatpak the app starts quietly at login so it can open on time. |
 | 💾 **Backup** | Export everything to one .zip, restore it later, and export your hours as CSV for your timesheet. |
 | 🔄 **Updates** | The app tells you when a new version is out and updates itself with one click. |
 | 🌗 **Light & dark** | Follows your system theme, or pick one. |
@@ -72,7 +72,7 @@ And ten more tricks:
   </tr>
 </table>
 
-The animation changes every 15 minutes. Check something off and it says **good job!**
+That makes 19 animations, and the cat picks a new one every 15 minutes. Check something off and it says **good job!**
 
 <p align="center"><img src="docs/accessories.png" alt="bow tie, coffee cup, beanie, Santa hat, ghost" width="560"><br>
 <sub>bow tie (3 days in a row) · coffee cup (5) · beanie (10) · Santa hat in December · boo in Halloween week</sub></p>
@@ -142,8 +142,8 @@ Everything can be changed later under **⚙**, and the tutorial is there too.
 
 Every user starts with a fresh, local database – nothing is shared or uploaded. The only things the
 app ever fetches are the weather (only the coordinates of the city you picked are sent to
-[open-meteo.com](https://open-meteo.com), and only if you pick one) and, for the .deb, the latest
-version number from GitHub.
+[open-meteo.com](https://open-meteo.com), and only if you pick one) and the latest
+version number from GitHub (Windows and .deb only, and you can turn it off).
 
 | What | Windows | Linux .deb | Linux Flatpak |
 |---|---|---|---|
@@ -179,23 +179,23 @@ Run the tests (they use temporary folders and never touch your real data):
 python3 -m unittest discover -s tests -t . -v
 ```
 
-Work on a branch and merge to `main` when the checks are green – every push runs the tests on Linux
+Work on a branch (`feature/…`, `fix/…`, `docs/…`) and merge to `main` with `--no-ff` when the checks are green – every push runs the tests on Linux
 and Windows, and changes to Windows files also build and test the Windows installer.
 
 Release a new version – GitHub Actions runs the tests, builds the .deb, the .flatpak and the Windows
 installer, checks that each one installs, and publishes the release. Nothing is released if a test fails:
 
 ```sh
-git tag v1.4.0 && git push origin v1.4.0
+git tag v1.7.0 && git push origin v1.7.0
 ```
 
 Or build the packages locally:
 
 ```sh
-./packaging/build-deb.sh 1.4.0      # -> packaging/dist/morgen-todo_1.4.0_all.deb
+./packaging/build-deb.sh 1.7.0      # -> packaging/dist/morgen-todo_1.7.0_all.deb
 flatpak-builder --user --install build packaging/flatpak/no.zivid.MorgenTodo.yml
 # Windows, in an MSYS2 UCRT64 shell with gtk4, libadwaita, python-gobject, python-cairo and pyinstaller:
-packaging/windows/build.sh 1.6.0 && iscc /DAppVersion=1.6.0 packaging/windows/installer.iss
+packaging/windows/build.sh 1.7.0 && iscc /DAppVersion=1.7.0 packaging/windows/installer.iss
 ```
 
 | File | |
@@ -206,7 +206,7 @@ packaging/windows/build.sh 1.6.0 && iscc /DAppVersion=1.6.0 packaging/windows/in
 | `cat_panel.py` | cat side panel: breed, colors, accessories and what the cat says |
 | `pomodoro_panel.py` | pomodoro side panel |
 | `database.py` | SQLite database, streaks, backup and CSV export |
-| `schedule.py` | times for opening, reminders, auto close and lunch (systemd timers, or in-app for Flatpak) |
+| `schedule.py` | times for opening, reminders, auto close and lunch (systemd timers on the .deb, in the app on Flatpak and Windows) |
 | `tutorial.py` | first-start tutorial and setup |
 | `updater.py` | checks GitHub for new versions and installs them |
 | `translations.py` | English and Norwegian texts |
