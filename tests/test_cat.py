@@ -69,6 +69,37 @@ class CatTest(unittest.TestCase):
         cat.load_cat_settings()
         cat.set_shape("normal")
 
+    def test_random_look(self):
+        for _i in range(50):
+            cat.random_look()
+            self.assertEqual(cat.SETTINGS["breed"], "custom")
+            for key, _name in cat.PARTS:
+                self.assertRegex(cat.COLORS[key], r"^#[0-9a-f]{6}$")
+            self.assertEqual(cat.SETTINGS["custom"]["colors"]["b"], cat.COLORS["b"])
+        cat.CAT_FILE.unlink(missing_ok=True)
+        cat.load_cat_settings()
+        cat.set_shape("normal")
+
+    def test_custom_look_comes_back_after_another_breed(self):
+        from cat_panel import CatPanel, to_rgba
+        panel = CatPanel(cat.TitleCat(lambda: PAL))
+        names = cat.breed_names()
+        panel.breed.set_selected(names.index("tuxedo"))
+        panel.color_btns["e"].set_rgba(to_rgba("#00ff00"))  # now "custom"
+        panel.maine_coon.set_active(True)
+        self.assertEqual(cat.SETTINGS["breed"], "custom")
+        panel.breed.set_selected(names.index("siamese"))
+        self.assertEqual(cat.COLORS["e"], cat.BREEDS["siamese"]["e"])
+        cat.load_cat_settings()  # also after a restart
+        panel.show_current_settings()
+        panel.breed.set_selected(len(names))  # "custom" again
+        self.assertEqual((cat.SETTINGS["breed"], cat.COLORS["e"], cat.SETTINGS["shape"]), ("custom", "#00ff00", "fluffy"))
+        self.assertEqual(cat.COLORS["b"], cat.BREEDS["tuxedo"]["b"])
+        cat.CAT_FILE.unlink(missing_ok=True)
+        cat.SETTINGS.pop("custom", None)
+        cat.load_cat_settings()
+        cat.set_shape("normal")
+
     def test_bowl_outside_lunch(self):
         cat.LUNCH = (23 * 60 + 58, 23 * 60 + 59)
         c = cat.TitleCat(lambda: PAL)

@@ -2,6 +2,7 @@
 
 Pick a breed, adjust each part's color (including the outline) and edit what the cat says.
 Any look, Maine Coon shape or not, can be saved under a name and then shows up among the breeds.
+An unsaved look ("custom") is kept while trying other breeds, and "random" makes up a new one.
 The title cat updates immediately and serves as the preview.
 Saved in ~/.config/morgen-todo/cat.json.
 """
@@ -44,6 +45,10 @@ class CatPanel(Gtk.Box):
         reset.add_css_class("flat")
         reset.connect("clicked", self.on_reset)
         head.append(reset)
+        randomize = Gtk.Button(label=_("random"), tooltip_text=_("Give the cat a random look"))
+        randomize.add_css_class("flat")
+        randomize.connect("clicked", self.on_random)
+        head.append(randomize)
         self.append(head)
 
         # --- Breed ---
@@ -160,7 +165,11 @@ class CatPanel(Gtk.Box):
             return
         names = cat.breed_names()
         i = dropdown.get_selected()
-        if i >= len(names):  # "custom" is selected automatically when a color or the shape changes
+        if i >= len(names):  # "custom": back to the look made here earlier
+            if cat.restore_custom_look():
+                self.show_current_settings()
+                self.title_cat.say(_("{breed}!").format(breed=_("custom")))
+                self.save_and_redraw()
             return
         cat.SETTINGS["breed"] = names[i]
         cat.COLORS.update(cat.breed_colors(names[i]))
@@ -172,6 +181,7 @@ class CatPanel(Gtk.Box):
     def became_custom(self):
         """The look no longer matches the chosen breed: show "custom" (the name is kept for saving it again)."""
         cat.SETTINGS["breed"] = "custom"
+        cat.remember_custom_look()
         self.updating = True
         self.breed.set_selected(len(cat.breed_names()))
         self.delete_breed.set_visible(False)
@@ -189,7 +199,7 @@ class CatPanel(Gtk.Box):
         if self.updating:
             return
         cat.set_shape("fluffy" if check.get_active() else "normal")
-        if cat.breed_shape(cat.SETTINGS["breed"]) != cat.SETTINGS["shape"]:
+        if cat.SETTINGS["breed"] == "custom" or cat.breed_shape(cat.SETTINGS["breed"]) != cat.SETTINGS["shape"]:
             self.became_custom()
         self.save_and_redraw()
 
@@ -205,6 +215,12 @@ class CatPanel(Gtk.Box):
     def on_delete_breed(self, _widget):
         cat.delete_custom_breed(cat.SETTINGS["breed"])
         self.show_current_settings()
+
+    def on_random(self, _button):
+        cat.random_look()
+        self.show_current_settings()
+        self.title_cat.say(_("new look!"))
+        self.save_and_redraw()
 
     def on_phrase(self, entry, key):
         if self.updating:

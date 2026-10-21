@@ -20,6 +20,7 @@ of view, the cat walks around the window frame until it is back. say(text) shows
 Sprites are drawn as fill using letter codes (b = fur, s = stripes, w = white, p = pink,
 e = eye, . = empty); the outline is added automatically. All sprites face right.
 """
+import colorsys
 import json
 import math
 
@@ -85,6 +86,7 @@ DEFAULT_PHRASES = dict(PHRASES)
 COLORS = dict(BREEDS["orange tabby"], c="#5aa9e6", f="#9a5b2e",  # c/f = food bowl
               v="#b48cff", k="#3a2a55")  # v/k = butterfly
 SETTINGS = {"breed": "orange tabby", "shape": "normal"}  # shape is kept when colors are customized ("custom")
+# SETTINGS["custom"] = {"colors": ..., "shape": ...}: the unsaved "custom" look, kept while trying other breeds
 
 
 def load_cat_settings():
@@ -103,6 +105,14 @@ def load_cat_settings():
     SETTINGS["shape"] = data.get("shape", breed_shape(SETTINGS["breed"]))
     COLORS.update(breed_colors(SETTINGS["breed"]) or BREEDS["orange tabby"])
     COLORS.update({k: v for k, v in data.get("colors", {}).items() if k in dict(PARTS)})
+    custom = data.get("custom")
+    if isinstance(custom, dict):
+        SETTINGS["custom"] = {"colors": dict(BREEDS["orange tabby"], **{k: v for k, v in custom.get("colors", {}).items() if k in dict(PARTS)}),
+                              "shape": "fluffy" if custom.get("shape") == "fluffy" else "normal"}
+    elif SETTINGS["breed"] == "custom":  # settings from before the custom look was kept separately
+        remember_custom_look()
+    else:
+        SETTINGS.pop("custom", None)
     PHRASES.update({k: v for k, v in data.get("phrases", {}).items() if k in PHRASES})
 
 
@@ -116,6 +126,7 @@ def save_cat_settings():
             "phrases": PHRASES,
             "wear": SETTINGS.get("wear", {}),
             "custom_breeds": CUSTOM_BREEDS,
+            **({"custom": SETTINGS["custom"]} if "custom" in SETTINGS else {}),
         }, indent=2), encoding="utf-8")
     except OSError:
         pass
@@ -153,6 +164,43 @@ def delete_custom_breed(name):
         if SETTINGS["breed"] == name:
             SETTINGS["breed"] = "custom"
         save_cat_settings()
+
+
+def remember_custom_look():
+    """Keep the current look as "custom", so it comes back after trying another breed."""
+    SETTINGS["custom"] = {"colors": {k: COLORS[k] for k, _p in PARTS}, "shape": SETTINGS["shape"]}
+
+
+def restore_custom_look():
+    """Back to the kept "custom" look. Returns False if there is none."""
+    if "custom" not in SETTINGS:
+        return False
+    COLORS.update(SETTINGS["custom"]["colors"])
+    set_shape(SETTINGS["custom"]["shape"])
+    SETTINGS["breed"] = "custom"
+    return True
+
+
+def _hsv(h, s, v):
+    return "#{:02x}{:02x}{:02x}".format(*(round(c * 255) for c in colorsys.hsv_to_rgb(h % 1, min(s, 1), min(v, 1))))
+
+
+def random_look():
+    """A random but still cat-like look (usually a natural coat, sometimes a wild color), kept as "custom"."""
+    if random.random() < 0.65:  # natural: grey/black/white or ginger/brown/cream
+        hue, sat = random.uniform(0.04, 0.11), random.choice((0, random.uniform(0.15, 0.75)))
+    else:
+        hue, sat = random.random(), random.uniform(0.35, 0.7)
+    val = random.uniform(0.25, 0.95)
+    stripes = _hsv(hue, sat * 1.15, val * 0.6) if random.random() < 0.8 else _hsv(hue, sat, val)
+    chest = random.choice(("#f3efe6", "#ffffff", _hsv(hue, sat * 0.35, min(1, val + 0.3))))
+    COLORS.update(b=_hsv(hue, sat, val), s=stripes, w=chest,
+                  p=_hsv(random.uniform(0.95, 1.0), random.uniform(0.3, 0.5), random.uniform(0.85, 0.95)),
+                  e=random.choice(("#7cc242", "#d4a72c", "#4a90d9", "#e08a2b", "#3fb5a3", "#9b6bd6")),
+                  o=_hsv(hue, 0.5, 0.15))
+    set_shape("fluffy" if random.random() < 0.25 else "normal")
+    SETTINGS["breed"] = "custom"
+    remember_custom_look()
 
 
 def random_phrase(event):
