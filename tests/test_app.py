@@ -181,7 +181,7 @@ class AppTest(unittest.TestCase):
         @step
         def playtime_start(w):
             r = next(c for c in [w.overlay.get_last_child()] if isinstance(c, cat.CatOverlay))
-            if r.mode != "title":
+            if r.mode != "title" and not self.last_try:
                 return WAIT  # still hopping back from the window frame (slow CI machines)
             t = w.title_cat
             if not hasattr(t, "cat_box"):  # the window may not have been painted yet (unfocused test window)
@@ -201,21 +201,28 @@ class AppTest(unittest.TestCase):
         def playtime_chase(w):
             r = next(c for c in [w.overlay.get_last_child()] if isinstance(c, cat.CatOverlay))
             x, y = r.paw_position()
-            check(abs(x - (r.area_width() - 40)) < 25 and abs(y - (r.area_height() - 40)) < 25, f"cat did not reach the pointer: {x:.0f},{y:.0f}")
+            reached = abs(x - (r.area_width() - 40)) < 25 and abs(y - (r.area_height() - 40)) < 25
+            if not reached and not self.last_try:
+                return WAIT
+            check(reached, f"cat did not reach the pointer: {x:.0f},{y:.0f}")
             r.on_pointer_leave(None)
             r.pointer_left -= 5
 
         @step
         def playtime_end(w):
             r = next(c for c in [w.overlay.get_last_child()] if isinstance(c, cat.CatOverlay))
-            check(r.mode == "title" and not w.title_cat.away, f"cat did not return after playtime: {r.mode}")
+            back = r.mode == "title" and not w.title_cat.away
+            if not back and not self.last_try:
+                return WAIT
+            check(back, f"cat did not return after playtime: {r.mode}")
             w.title_cat.forced = None
             w.hours.set_value(6.5)
             w.close()
 
         def run(i=0, tries=0):
             try:
-                if steps[i](app.window) is WAIT and tries < 50:  # the step isn't ready: try again shortly
+                self.last_try = tries >= 50  # then the step checks and reports instead of waiting
+                if steps[i](app.window) is WAIT:  # the step isn't ready: try again shortly
                     GLib.timeout_add(200, lambda: run(i, tries + 1) and False)
                     return False
             except Exception:
