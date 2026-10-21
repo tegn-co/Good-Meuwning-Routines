@@ -16,6 +16,7 @@ import tutorial  # noqa: E402
 import app as W  # noqa: E402
 
 tutorial.pin_to_dock = lambda: True
+WAIT = object()  # returned by a step that should run again shortly
 
 
 class AppTest(unittest.TestCase):
@@ -180,6 +181,8 @@ class AppTest(unittest.TestCase):
         @step
         def playtime_start(w):
             r = next(c for c in [w.overlay.get_last_child()] if isinstance(c, cat.CatOverlay))
+            if r.mode != "title":
+                return WAIT  # still hopping back from the window frame (slow CI machines)
             t = w.title_cat
             if not hasattr(t, "cat_box"):  # the window may not have been painted yet (unfocused test window)
                 import cairo
@@ -210,9 +213,11 @@ class AppTest(unittest.TestCase):
             w.hours.set_value(6.5)
             w.close()
 
-        def run(i=0):
+        def run(i=0, tries=0):
             try:
-                steps[i](app.window)
+                if steps[i](app.window) is WAIT and tries < 50:  # the step isn't ready: try again shortly
+                    GLib.timeout_add(200, lambda: run(i, tries + 1) and False)
+                    return False
             except Exception:
                 failures.append(f"{steps[i].__name__}: {traceback.format_exc()}")
             if i + 1 < len(steps):
