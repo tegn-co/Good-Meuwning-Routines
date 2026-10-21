@@ -65,8 +65,10 @@ BREEDS = {
     "siamese": {"b": "#efe2cc", "s": "#7a5a45", "w": "#efe2cc", "p": "#c98f7d", "e": "#4a90d9", "o": "#4a3528"},
     "maine coon": {"b": "#a8743f", "s": "#5e3b1e", "w": "#f3e9d9", "p": "#e8a0a0", "e": "#d4a72c", "o": "#2a1a10"},
 }
-# Breeds with their own shape (the rest use the default): fluffy = ear tufts and a thick tail
+# Breeds with their own shape (the rest use the default): fluffy = bigger, with ear tufts and a thick tail
 BREED_SHAPES = {"maine coon": "fluffy"}
+# Breeds saved from the cat panel: name -> {"colors": {part: hex}, "shape": "normal"/"fluffy"}
+CUSTOM_BREEDS = {}
 # What the cat says; alternatives are separated by | and picked at random. Empty = silent
 EVENTS = [
     ("check", "you check something off"),
@@ -90,10 +92,16 @@ def load_cat_settings():
         data = json.loads(CAT_FILE.read_text(encoding="utf-8"))
     except (OSError, ValueError):
         data = {}
+    CUSTOM_BREEDS.clear()
+    for name, breed in data.get("custom_breeds", {}).items():
+        if name in BREEDS or not isinstance(breed, dict):
+            continue
+        colors = dict(BREEDS["orange tabby"], **{k: v for k, v in breed.get("colors", {}).items() if k in dict(PARTS)})
+        CUSTOM_BREEDS[name] = {"colors": colors, "shape": "fluffy" if breed.get("shape") == "fluffy" else "normal"}
     SETTINGS["breed"] = data.get("breed", "orange tabby")
     SETTINGS["wear"] = data.get("wear", {})
-    SETTINGS["shape"] = data.get("shape", BREED_SHAPES.get(SETTINGS["breed"], "normal"))
-    COLORS.update(BREEDS.get(SETTINGS["breed"], BREEDS["orange tabby"]))
+    SETTINGS["shape"] = data.get("shape", breed_shape(SETTINGS["breed"]))
+    COLORS.update(breed_colors(SETTINGS["breed"]) or BREEDS["orange tabby"])
     COLORS.update({k: v for k, v in data.get("colors", {}).items() if k in dict(PARTS)})
     PHRASES.update({k: v for k, v in data.get("phrases", {}).items() if k in PHRASES})
 
@@ -107,9 +115,44 @@ def save_cat_settings():
             "colors": {k: COLORS[k] for k, _ in PARTS},
             "phrases": PHRASES,
             "wear": SETTINGS.get("wear", {}),
+            "custom_breeds": CUSTOM_BREEDS,
         }, indent=2), encoding="utf-8")
     except OSError:
         pass
+
+
+def breed_names():
+    """Built-in breeds first, then the saved ones."""
+    return list(BREEDS) + list(CUSTOM_BREEDS)
+
+
+def breed_colors(name):
+    """A breed's colors, or None for "custom" (unsaved) and unknown names."""
+    return BREEDS.get(name) or CUSTOM_BREEDS.get(name, {}).get("colors")
+
+
+def breed_shape(name):
+    return CUSTOM_BREEDS[name]["shape"] if name in CUSTOM_BREEDS else BREED_SHAPES.get(name, "normal")
+
+
+def save_custom_breed(name):
+    """Save the current colors and shape as a breed (replaces a saved one with the same name).
+    Returns False for names that can't be used: empty, "custom" or a built-in breed."""
+    name = name.strip()
+    if not name or name in BREEDS or name in ("custom", _("custom")) or name in map(_, BREEDS):
+        return False
+    CUSTOM_BREEDS[name] = {"colors": {k: COLORS[k] for k, _p in PARTS}, "shape": SETTINGS["shape"]}
+    SETTINGS["breed"] = name
+    save_cat_settings()
+    return True
+
+
+def delete_custom_breed(name):
+    """Forget a saved breed; the cat keeps its look, now as "custom"."""
+    if CUSTOM_BREEDS.pop(name, None) is not None:
+        if SETTINGS["breed"] == name:
+            SETTINGS["breed"] = "custom"
+        save_cat_settings()
 
 
 def random_phrase(event):
@@ -334,9 +377,37 @@ def add_outline(fill):
     return out
 
 
+MAINE_COON_GROWTH = 2  # sprite pixels the Maine Coon is taller and longer than the other cats
+
+
+def _transpose(rows):
+    return ["".join(col) for col in zip(*rows)]
+
+
+def _repeat_body_lines(lines, count, rank):
+    """Repeat `count` lines with fur (b/s) and no face pixels (eyes, nose/inner ears), best rank() first."""
+    ok = [i for i, ln in enumerate(lines) if (ln.count("b") + ln.count("s")) and not set(ln) & set("epo")]
+    for i in sorted(sorted(ok, key=rank)[:count], reverse=True):  # from the bottom up, so earlier indices stay valid
+        lines.insert(i + 1, lines[i])
+    return lines
+
+
+def _grow(fill, extra=MAINE_COON_GROWTH):
+    """A bigger cat: `extra` rows and columns of the body are repeated. Columns preferably go through the
+    middle of the torso, not through the ear tips (they keep their tufts) or the legs and chest."""
+    w = max(len(r) for r in fill)
+    rows = [r.ljust(w, ".") for r in fill]
+    fur = lambda ln: ln.count("b") + ln.count("s")
+    rows = _repeat_body_lines(rows, extra, lambda i: -fur(rows[i]))
+    ears = next((i for i, r in enumerate(rows) if "p" in r), 0) + 1  # rows down to the inner ears
+    cols = _transpose(rows)
+    rank = lambda i: (set(cols[i][:ears]) != {"."}, "w" in cols[i], abs(i - w / 2), -fur(cols[i]))
+    return _transpose(_repeat_body_lines(cols, extra, rank))
+
+
 def maine_coon_shape(fill):
-    """Maine Coon shape: tall dark tufts on the ear tips and a double-thick tail."""
-    rows = list(fill)
+    """Maine Coon shape: a couple of pixels bigger, tall dark tufts on the ear tips and a double-thick tail."""
+    rows = _grow(fill)
     # Tail: rows starting with a single fur pixel at the far left get one more pixel
     for i, r in enumerate(rows):
         j = len(r) - len(r.lstrip("."))
