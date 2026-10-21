@@ -41,6 +41,34 @@ class CatTest(unittest.TestCase):
                 c.say("good job!")
                 c.draw(None, cr, 320, 86)
 
+    def test_maine_coon_is_bigger(self):
+        g = cat.MAINE_COON_GROWTH
+        for name, frames in cat.FILL.items():
+            for f in frames:
+                w, h = cat.sprite_size(f)
+                grown = cat._grow(f)
+                self.assertEqual(cat.sprite_size(grown), (w + g, h + g), name)
+                self.assertEqual("".join(grown).count("e"), "".join(f).count("e"), f"{name}: eyes stretched")
+
+    def test_custom_breed_is_saved_and_loaded(self):
+        cat.COLORS.update(cat.BREEDS["black"], e="#00ff00")
+        cat.set_shape("fluffy")
+        self.assertTrue(cat.save_custom_breed(" Mittens "))
+        self.assertFalse(cat.save_custom_breed("tuxedo"))  # built-in names are taken
+        self.assertFalse(cat.save_custom_breed("custom"))
+        cat.CUSTOM_BREEDS.clear()
+        cat.load_cat_settings()
+        self.assertEqual(cat.breed_names()[-1], "Mittens")
+        self.assertEqual(cat.SETTINGS["breed"], "Mittens")
+        self.assertEqual(cat.breed_shape("Mittens"), "fluffy")
+        self.assertEqual(cat.breed_colors("Mittens")["e"], "#00ff00")
+        cat.delete_custom_breed("Mittens")
+        cat.load_cat_settings()
+        self.assertEqual((cat.CUSTOM_BREEDS, cat.SETTINGS["breed"]), ({}, "custom"))
+        cat.CAT_FILE.unlink()
+        cat.load_cat_settings()
+        cat.set_shape("normal")
+
     def test_bowl_outside_lunch(self):
         cat.LUNCH = (23 * 60 + 58, 23 * 60 + 59)
         c = cat.TitleCat(lambda: PAL)

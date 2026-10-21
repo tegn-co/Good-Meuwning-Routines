@@ -1,6 +1,7 @@
 """Cat settings side panel (slides out like the plan and pomodoro panels).
 
 Pick a breed, adjust each part's color (including the outline) and edit what the cat says.
+Any look, Maine Coon shape or not, can be saved under a name and then shows up among the breeds.
 The title cat updates immediately and serves as the preview.
 Saved in ~/.config/morgen-todo/cat.json.
 """
@@ -47,9 +48,29 @@ class CatPanel(Gtk.Box):
 
         # --- Breed ---
         self.append(label("breed", "num"))
-        self.breed = Gtk.DropDown.new_from_strings([_(b) for b in cat.BREEDS] + [_("custom")])
+        self.breed = Gtk.DropDown()
         self.breed.connect("notify::selected", self.on_breed)
         self.append(self.breed)
+        self.maine_coon = Gtk.CheckButton(label=_("maine coon"), tooltip_text=_("A bigger cat with ear tufts and a thick tail"))
+        self.maine_coon.add_css_class("detail")
+        self.maine_coon.connect("toggled", self.on_maine_coon)
+        self.append(self.maine_coon)
+
+        # --- Save the current look as a breed of its own ---
+        row = Gtk.Box(spacing=6)
+        self.breed_name = Gtk.Entry(placeholder_text=_("name your cat"), hexpand=True)
+        self.breed_name.connect("activate", self.on_save_breed)
+        self.breed_name.connect("changed", lambda _e: self.breed_name.remove_css_class("error"))
+        row.append(self.breed_name)
+        save = Gtk.Button(label=_("save"), tooltip_text=_("Save these colors as a breed"))
+        save.add_css_class("flat")
+        save.connect("clicked", self.on_save_breed)
+        row.append(save)
+        self.delete_breed = Gtk.Button(label=_("delete"), tooltip_text=_("Delete this saved breed"))
+        self.delete_breed.add_css_class("flat")
+        self.delete_breed.connect("clicked", self.on_delete_breed)
+        row.append(self.delete_breed)
+        self.append(row)
 
         # --- Colors ---
         colors_title = label("colors", "num")
@@ -97,9 +118,17 @@ class CatPanel(Gtk.Box):
 
     def show_current_settings(self):
         self.updating = True
-        names = list(cat.BREEDS)
+        names = cat.breed_names()
+        # Built-in breeds are translated; saved ones keep the name they were given
+        shown = [_(b) for b in cat.BREEDS] + list(cat.CUSTOM_BREEDS) + [_("custom")]
+        model = self.breed.get_model()
+        if model is None or [model.get_string(i) for i in range(model.get_n_items())] != shown:
+            self.breed.set_model(Gtk.StringList.new(shown))
         breed = cat.SETTINGS["breed"]
         self.breed.set_selected(names.index(breed) if breed in names else len(names))
+        self.maine_coon.set_active(cat.SETTINGS["shape"] == "fluffy")
+        self.delete_breed.set_visible(breed in cat.CUSTOM_BREEDS)
+        self.breed_name.set_text(breed if breed in cat.CUSTOM_BREEDS else "")
         for key, btn in self.color_btns.items():
             btn.set_rgba(to_rgba(cat.COLORS[key]))
         for key, entry in self.phrase_entries.items():
@@ -129,27 +158,53 @@ class CatPanel(Gtk.Box):
     def on_breed(self, dropdown, _pspec):
         if self.updating:
             return
-        names = list(cat.BREEDS)
+        names = cat.breed_names()
         i = dropdown.get_selected()
-        if i >= len(names):  # "custom" is selected automatically when a color changes
+        if i >= len(names):  # "custom" is selected automatically when a color or the shape changes
             return
         cat.SETTINGS["breed"] = names[i]
-        cat.COLORS.update(cat.BREEDS[names[i]])
-        cat.set_shape(cat.BREED_SHAPES.get(names[i], "normal"))
+        cat.COLORS.update(cat.breed_colors(names[i]))
+        cat.set_shape(cat.breed_shape(names[i]))
         self.show_current_settings()
-        self.title_cat.say(_("{breed}!").format(breed=_(names[i])))
+        self.title_cat.say(_("{breed}!").format(breed=_(names[i]) if names[i] in cat.BREEDS else names[i]))
         self.save_and_redraw()
+
+    def became_custom(self):
+        """The look no longer matches the chosen breed: show "custom" (the name is kept for saving it again)."""
+        cat.SETTINGS["breed"] = "custom"
+        self.updating = True
+        self.breed.set_selected(len(cat.breed_names()))
+        self.delete_breed.set_visible(False)
+        self.updating = False
 
     def on_color(self, btn, _, key):
         if self.updating:
             return
         cat.COLORS[key] = to_hex(btn.get_rgba())
-        if cat.BREEDS.get(cat.SETTINGS["breed"], {}).get(key) != cat.COLORS[key]:
-            cat.SETTINGS["breed"] = "custom"
-            self.updating = True
-            self.breed.set_selected(len(cat.BREEDS))
-            self.updating = False
+        if (cat.breed_colors(cat.SETTINGS["breed"]) or {}).get(key) != cat.COLORS[key]:
+            self.became_custom()
         self.save_and_redraw()
+
+    def on_maine_coon(self, check):
+        if self.updating:
+            return
+        cat.set_shape("fluffy" if check.get_active() else "normal")
+        if cat.breed_shape(cat.SETTINGS["breed"]) != cat.SETTINGS["shape"]:
+            self.became_custom()
+        self.save_and_redraw()
+
+    def on_save_breed(self, _widget):
+        name = self.breed_name.get_text().strip()
+        if not cat.save_custom_breed(name):
+            self.breed_name.add_css_class("error")  # empty, or the name of a built-in breed
+            return
+        self.show_current_settings()
+        self.title_cat.say(_("{breed}!").format(breed=name))
+        self.title_cat.queue_draw()
+
+    def on_delete_breed(self, _widget):
+        cat.delete_custom_breed(cat.SETTINGS["breed"])
+        self.show_current_settings()
 
     def on_phrase(self, entry, key):
         if self.updating:

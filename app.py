@@ -1311,6 +1311,7 @@ class MainWindow(Adw.ApplicationWindow):
         others = [b for name, b in self.side_buttons().items() if name != page and b.get_active()]
         if btn.get_active():
             self.side_stack.set_visible_child_name(page)
+            self.side.get_vadjustment().set_value(0)  # the pages share one scroll position; always start at the top
             if others:
                 self.switching = True
                 for b in others:
