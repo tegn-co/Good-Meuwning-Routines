@@ -3,6 +3,7 @@
 Folders, how reminders are scheduled, start at login, notifications, bundled fonts and restarting.
 """
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -17,6 +18,21 @@ USES_APP_SCHEDULER = IN_FLATPAK or IS_WINDOWS
 
 APP_ID = "no.zivid.MorgenTodo"
 RUN_KEY = r"Software\Microsoft\Windows\CurrentVersion\Run"  # Windows: programs started at login
+
+# Our pixel fonts have no ⚙, ▸, ☀, 🍅 … Linux finds them in other fonts by itself (fontconfig), but on
+# Windows GTK only looks in the fonts it is given, so name Windows' own symbol fonts after ours
+SYMBOL_FONTS = ["Segoe UI Symbol", "Segoe UI Emoji"] if IS_WINDOWS else []
+
+
+def font_families(family):
+    """Pango family list: the font, then the symbol fonts."""
+    return ",".join([family] + SYMBOL_FONTS)
+
+
+def with_symbol_fonts(css):
+    """The CSS with the symbol fonts added to every font-family."""
+    extra = "".join(f', "{font}"' for font in SYMBOL_FONTS)
+    return re.sub(r'(font-family:\s*"[^"]+")', lambda m: m.group(1) + extra, css)
 
 
 def _windows_dir(var, fallback):

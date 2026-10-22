@@ -61,22 +61,6 @@ class CatPanel(Gtk.Box):
         self.maine_coon.connect("toggled", self.on_maine_coon)
         self.append(self.maine_coon)
 
-        # --- Save the current look as a breed of its own ---
-        row = Gtk.Box(spacing=6)
-        self.breed_name = Gtk.Entry(placeholder_text=_("name your cat"), hexpand=True)
-        self.breed_name.connect("activate", self.on_save_breed)
-        self.breed_name.connect("changed", lambda _e: self.breed_name.remove_css_class("error"))
-        row.append(self.breed_name)
-        save = Gtk.Button(label=_("save"), tooltip_text=_("Save these colors as a breed"))
-        save.add_css_class("flat")
-        save.connect("clicked", self.on_save_breed)
-        row.append(save)
-        self.delete_breed = Gtk.Button(label=_("delete"), tooltip_text=_("Delete this saved breed"))
-        self.delete_breed.add_css_class("flat")
-        self.delete_breed.connect("clicked", self.on_delete_breed)
-        row.append(self.delete_breed)
-        self.append(row)
-
         # --- Colors ---
         colors_title = label("colors", "num")
         colors_title.set_margin_top(10)
@@ -91,6 +75,22 @@ class CatPanel(Gtk.Box):
             grid.attach(btn, 1, row, 1, 1)
             self.color_btns[key] = btn
         self.append(grid)
+
+        # --- Save the current look as a breed of its own ---
+        row = Gtk.Box(spacing=6, margin_top=6)
+        self.breed_name = Gtk.Entry(placeholder_text=_("name your cat"), hexpand=True)
+        self.breed_name.connect("activate", self.on_save_breed)
+        self.breed_name.connect("changed", lambda _e: self.breed_name.remove_css_class("error"))
+        row.append(self.breed_name)
+        save = Gtk.Button(label=_("save"), tooltip_text=_("Save these colors as a breed"))
+        save.add_css_class("flat")
+        save.connect("clicked", self.on_save_breed)
+        row.append(save)
+        self.delete_breed = Gtk.Button(label=_("delete"), tooltip_text=_("Delete this saved breed"))
+        self.delete_breed.add_css_class("flat")
+        self.delete_breed.connect("clicked", self.on_delete_breed)
+        row.append(self.delete_breed)
+        self.append(row)
 
         # --- Accessories (unlocked by streaks) ---
         wear_title = label("accessories", "num")
