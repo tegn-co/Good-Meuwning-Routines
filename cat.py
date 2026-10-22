@@ -1151,15 +1151,23 @@ class CatOverlay(Gtk.DrawingArea):
     cat walks around is the overlay's size, i.e. the visible content; the square can never enlarge it.
 
     On the title the cat is drawn where the title is (TitleCat drives the animation). If the title is
-    scrolled out of view, or the animation is "climb", the cat walks around the inside of the window
-    edge: bottom, up the right wall, upside down along the top, down the left wall. When the title is
-    visible again, it hops back.
+    scrolled out of view, the cat jumps down into the window and explores it: it walks on things – the
+    text of labels, the lines between items, boxes, entries, the water glasses – and hops between them,
+    and if what it stands on scrolls away it falls onto whatever is below (the window's bottom edge is
+    the floor). It never stands on thin air. During "climb" it walks around the inside of the window
+    edge instead: bottom, up the right wall, upside down along the top, down the left wall. When the
+    title is visible again, it hops back.
     """
 
     SPEED = 40  # pixels per second along the frame
     EDGE = 1  # distance from the edge to the paws
     HALF = 11 * PX  # half the cat's length: it turns at a corner when its nose reaches the wall, so nothing sticks out
     BOX = 160  # canvas size around the cat (room for bubble, bowl and z's)
+    # Things to stand on: widgets of these types (their top, or a label's text) and boxes with a line on top
+    SURFACE_TYPES = (Gtk.Label, Gtk.Entry, Gtk.SpinButton, Gtk.DropDown)
+    SURFACE_CLASSES = ("item", "hours", "water", "planbox", "setrow")
+    MIN_SURFACE = 8 * PX  # narrower things (a checkbox) are too small to stand on
+    HEAD_ROOM = 17 * PX  # the cat needs this much room above its paws
 
     def __init__(self, title, overlay):
         super().__init__(can_target=False)
@@ -1179,8 +1187,10 @@ class CatOverlay(Gtk.DrawingArea):
         title.on_playtime = self.start_playtime
         self.title = title
         title.external = True
-        self.mode = "title"  # title | frame | hop | playtime
+        self.mode = "title"  # title | frame | roam | hop | playtime
         self.s, self.d = 0.0, 1  # position along the frame and direction
+        self.anchor = (None, 0.0)  # what the cat stands on in roam and playtime: (widget, x from its left)
+        self.rest = 0.0  # seconds left sitting down while exploring
         self.hop = None
         self.enter = 0.0  # pixels the cat is still above the top edge while climbing into the frame
         self.last = time.monotonic()
@@ -1214,32 +1224,36 @@ class CatOverlay(Gtk.DrawingArea):
         x, y = self.paw_position()
         angle = self.pose_on_frame(self.s)[2] if self.mode == "frame" else 0.0
         self.enter = 0.0
-        self.start_hop((x, y, angle), (x, y, 0.0), "playtime")  # a small hop in place to start the chase
+        to = self.anchor_on(self.surface_below(x, y), x)  # a small hop to start the chase (down, if on a wall)
+        self.start_hop((x, y, angle), self.anchor_pos(to)[:2] + (0.0,), "playtime", to)
 
     def playtime_landing_spot(self):
-        """Where the cat will land: at the pointer, but inside the window."""
+        """Where the cat will land: on whatever is under the pointer – never in thin air."""
         px, py = self.pointer
-        return (max(self.HALF, min(self.area_width() - self.HALF, px)),
-                max(17 * PX, min(self.area_height() - 1, py)))
+        px = max(0.0, min(float(self.area_width()), px))
+        return self.anchor_on(self.surface_below(px, py), px)
 
     def playtime_tick(self, dt, now, tx, ty, visible):
-        x, y = self.pt
+        x, y, standing = self.anchor_pos(self.anchor)
         gone = self.pointer is None and now - self.pointer_left > 4
         if now > self.play_until or gone:
-            # Playtime over: back to the title, or out to the frame if the title is scrolled away
+            # Playtime over: back to the title, or exploring the window if the title is scrolled away
             self.play_until = 0.0
             if visible:
                 self.start_hop((x, y, 0.0), (tx, ty, 0.0), "title")
             else:
-                self.s, self.d = 0.0, 1
-                self.start_hop((x, y, 0.0), self.pose_on_frame(0.0), "frame")
+                self.mode, self.rest, self.d = "roam", 0.0, 1
+            return
+        if not standing:
+            self.fall_from(x, y, "playtime")  # the thing it sat on scrolled away
             return
         self.play_wait -= dt
         if self.play_wait <= 0 and self.pointer:
-            gx, gy = self.playtime_landing_spot()
+            to = self.playtime_landing_spot()
+            gx, gy, _ok = self.anchor_pos(to)
             if math.hypot(gx - x, gy - y) > 14:
                 self.pt_flip = gx < x
-                self.start_hop((x, y, 0.0), (gx, gy, 0.0), "playtime")
+                self.start_hop((x, y, 0.0), (gx, gy, 0.0), "playtime", to)
 
     # --- geometry ---
     def frame_edges(self):
@@ -1277,6 +1291,142 @@ class CatOverlay(Gtk.DrawingArea):
         visible = y - 17 * PX >= 0 and y <= self.area_height()  # the whole cat must fit
         return x, y, visible
 
+    # --- things to stand on ---
+    def surface_top(self, widget, bounds):
+        """(x0, x1, y) of the walkable top of a widget, from its bounds in overlay coordinates."""
+        x, y, w, h = bounds.get_x(), bounds.get_y(), bounds.get_width(), bounds.get_height()
+        if widget is self.title:
+            lo, hi = widget.walkable_range()
+            return x + lo, x + hi, y + widget.top + PX
+        if isinstance(widget, Gtk.Label):  # the text itself: where the letters are, not the label's empty space
+            ink, logical = widget.get_layout().get_pixel_extents()
+            if not widget.get_text() or ink.width <= 0:
+                return x, x, y
+            left = x + (w - logical.width) * widget.get_xalign() + ink.x
+            return left, left + ink.width, y + (h - logical.height) * widget.get_yalign() + ink.y
+        if isinstance(widget, Gtk.Entry):
+            return x, x + w, y + h - 1  # entries are just an underline here
+        return x, x + w, y + getattr(widget, "cat_surface_offset", 0)
+
+    def surfaces(self):
+        """Everything the cat can stand on right now: [(widget, x0, x1, y)] in overlay coordinates,
+        ending with the window's bottom edge (widget None), so there is always a floor."""
+        w, h = self.area_width(), self.area_height()
+        found = []
+
+        def add(widget):
+            ok, bounds = widget.compute_bounds(self.overlay)
+            if ok:
+                x0, x1, y = self.surface_top(widget, bounds)
+                x0, x1 = max(0.0, x0), min(float(w), x1)
+                if x1 - x0 >= self.MIN_SURFACE and self.HEAD_ROOM <= y <= h - 2:
+                    found.append((widget, x0, x1, y))
+
+        def visit(parent):
+            child = parent.get_first_child()
+            while child:
+                if child is not self and child.get_mapped():
+                    if child is self.title or hasattr(child, "cat_surface_offset"):
+                        add(child)
+                    elif isinstance(child, self.SURFACE_TYPES) or any(child.has_css_class(c) for c in self.SURFACE_CLASSES):
+                        add(child)
+                        if not isinstance(child, self.SURFACE_TYPES):
+                            visit(child)  # a box: also the text inside it
+                    else:
+                        visit(child)
+                child = child.get_next_sibling()
+
+        visit(self.overlay)
+        found.append((None, 0.0, float(w), h - self.EDGE))
+        return found
+
+    def surface_below(self, x, y):
+        """The surface something falling from (x, y) lands on: the highest one under it."""
+        under = [s for s in self.surfaces() if s[1] <= x <= s[2] and s[3] >= y - 2]
+        return min(under, key=lambda s: s[3])
+
+    def anchor_on(self, surface, x):
+        """Stand on a surface near x. The anchor follows the widget when the list scrolls."""
+        widget, x0, x1, _y = surface
+        margin = min(self.HALF, (x1 - x0) / 2)
+        x = max(x0 + margin, min(x1 - margin, x))
+        if widget is None:
+            return (None, x)
+        ok, bounds = widget.compute_bounds(self.overlay)
+        return (widget, x - bounds.get_x() if ok else 0.0)
+
+    def anchor_pos(self, anchor):
+        """(x, y, still standing) for an anchor: False once the thing is gone or out of view."""
+        widget, dx = anchor
+        if widget is None:
+            return dx, self.area_height() - self.EDGE, True
+        ok, bounds = widget.compute_bounds(self.overlay) if widget.get_mapped() else (False, None)
+        if not ok:
+            return dx, 0.0, False
+        x0, x1, y = self.surface_top(widget, bounds)
+        x = bounds.get_x() + dx
+        standing = x0 - 4 <= x <= x1 + 4 and self.HEAD_ROOM <= y <= self.area_height() - 2
+        return x, y, standing
+
+    def on_surface(self):
+        """True if the cat's paws are on something (for tests)."""
+        x, y = self.paw_position()
+        return any(x0 - 4 <= x <= x1 + 4 and abs(y - sy) <= 1.5 for _w, x0, x1, sy in self.surfaces())
+
+    def fall_from(self, x, y, then):
+        """What the cat stood on is gone: it drops onto whatever is below."""
+        target = self.anchor_on(self.surface_below(x, max(y, self.HEAD_ROOM)), x)
+        self.start_hop((x, y, 0.0), self.anchor_pos(target)[:2] + (0.0,), then, target)
+
+    # --- exploring the window when the title is scrolled away ---
+    def enter_roam(self):
+        """Jump down from above onto something near the top of the window."""
+        w = self.area_width()
+        x = random.uniform(self.HALF, max(self.HALF, w - self.HALF))
+        target = self.anchor_on(self.surface_below(x, self.HEAD_ROOM), x)
+        self.d, self.rest = (1 if x < w / 2 else -1), 0.0
+        self.start_hop((x, -self.HEAD_ROOM, 0.0), self.anchor_pos(target)[:2] + (0.0,), "roam", target)
+
+    def next_surface(self, x, y):
+        """Somewhere to hop to from (x, y), in the walking direction if possible."""
+        here = self.anchor[0]
+        near = [s for s in self.surfaces() if s[0] is not here and abs(s[3] - y) <= 90
+                and s[1] - 70 <= x <= s[2] + 70 and abs(s[3] - y) + abs(min(max(x, s[1]), s[2]) - x) > 12]
+        ahead = [s for s in near if (s[2] > x + 10 if self.d > 0 else s[1] < x - 10)]
+        options = ahead or near
+        return random.choice(options) if options else None
+
+    def roam_tick(self, dt):
+        x, y, standing = self.anchor_pos(self.anchor)
+        if not standing:
+            self.fall_from(x, y, "roam")
+            return
+        if self.rest > 0:
+            self.rest -= dt
+            return
+        widget, dx = self.anchor
+        if widget is None:
+            x0, x1 = 0.0, float(self.area_width())
+        else:
+            x0, x1, _y = self.surface_top(widget, widget.compute_bounds(self.overlay)[1])
+        margin = min(self.HALF, (x1 - x0) / 2)
+        step = self.d * self.SPEED * dt
+        at_end = x + step > x1 - margin if self.d > 0 else x + step < x0 + margin
+        if at_end or random.random() < dt * 0.12:  # at the end of the thing, or just feeling like a jump
+            target = self.next_surface(x, y)
+            if target:
+                to = self.anchor_on(target, x + self.d * 40)
+                tx, ty, _ok = self.anchor_pos(to)
+                self.d = 1 if tx >= x else -1
+                self.start_hop((x, y, 0.0), (tx, ty, 0.0), "roam", to)
+                return
+            if at_end:
+                self.d = -self.d  # nowhere to go: turn around
+                return
+        self.anchor = (widget, dx + step)
+        if random.random() < dt * 0.1:
+            self.rest = random.uniform(1.5, 4)  # sit down for a bit
+
     # --- animation ---
     def tick(self, widget, clock):
         if was_closed(self):
@@ -1297,8 +1447,10 @@ class CatOverlay(Gtk.DrawingArea):
             pass  # driven by playtime_tick; its hops go through "hop" below
         elif self.mode == "title" and want_frame:
             self.title.away = True
-            if not visible:
-                # Title scrolled away: the cat climbs down into the frame from above, along the nearest wall
+            if not visible and not climbing:
+                self.enter_roam()  # title scrolled away: jump down and explore the window
+            elif not visible:
+                # Climbing with the title scrolled away: the cat climbs down into the frame from above, along the nearest wall
                 if tx < self.area_width() / 2:
                     self.s, self.d = 2 * iw + ih, 1  # top of the left wall, heading down
                 else:
@@ -1323,16 +1475,33 @@ class CatOverlay(Gtk.DrawingArea):
                 x, y = self.paw_position()  # where the cat actually is (also mid climb-in)
                 self.start_hop((x, y, self.pose_on_frame(self.s)[2]), (tx, ty, 0.0), "title")
                 self.enter = 0.0
+            elif not climbing and self.enter == 0:
+                x, y = self.paw_position()  # done climbing: let go of the frame and drop onto something
+                self.d, self.rest = 1, 0.0
+                self.fall_from(x, y, "roam")
+        elif self.mode == "roam":
+            if visible:
+                x, y = self.paw_position()
+                self.start_hop((x, y, 0.0), (tx, ty, 0.0), "title")
+            else:
+                self.roam_tick(dt)
         elif self.mode == "hop":
             self.hop["t"] += dt / 0.7
             if self.hop["then"] == "title":
                 self.hop["to"] = (tx, ty, 0.0)  # the title may have moved while the cat was in the air
+            elif self.hop.get("anchor"):
+                ax, ay, ok = self.anchor_pos(self.hop["anchor"])
+                if ok:
+                    self.hop["to"] = (ax, ay, 0.0)  # so does what it lands on (scrolling)
             if self.hop["t"] >= 1:
                 self.mode = self.hop["then"]
+                if self.hop.get("anchor"):
+                    self.anchor = self.hop["anchor"]
                 if self.mode == "playtime":
-                    self.pt = self.hop["to"][:2]
                     self.play_wait = 0.25
-                    if self.pointer and math.hypot(*(a - b for a, b in zip(self.playtime_landing_spot(), self.pt))) < 20:
+                    here = self.anchor_pos(self.anchor)
+                    spot = self.anchor_pos(self.playtime_landing_spot()) if self.pointer else None
+                    if spot and math.hypot(spot[0] - here[0], spot[1] - here[1]) < 20:
                         self.play_catches += 1  # landed on the pointer
                         self.play_wait = 0.8
                         if self.play_catches % 3 == 1:
@@ -1360,8 +1529,9 @@ class CatOverlay(Gtk.DrawingArea):
         if self.mode == "frame":
             x, y, _ = self.pose_on_frame(self.s)
             return x, y - self.enter
-        if self.mode == "playtime":
-            return self.pt
+        if self.mode in ("playtime", "roam"):
+            x, y, _ok = self.anchor_pos(self.anchor)
+            return x, y
         e = min(self.hop["t"], 1)
         (x0, y0, _), (x1, y1, _) = self.hop["from"], self.hop["to"]
         return x0 + (x1 - x0) * e, y0 + (y1 - y0) * e - math.sin(math.pi * e) * self.hop_height(y0, y1)
@@ -1374,8 +1544,9 @@ class CatOverlay(Gtk.DrawingArea):
         """Hop height: 40 px, but never so high that the cat disappears above the top edge."""
         return max(0.0, min(40.0, min(y0, y1) - 17 * PX))
 
-    def start_hop(self, frm, to, then):
-        self.hop = {"from": frm, "to": to, "then": then, "t": 0.0}
+    def start_hop(self, frm, to, then, anchor=None):
+        """Jump from frm to to (x, y, angle); anchor = what it lands on, followed while in the air."""
+        self.hop = {"from": frm, "to": to, "then": then, "t": 0.0, "anchor": anchor}
         self.mode = "hop"
 
     # --- drawing ---
@@ -1395,9 +1566,13 @@ class CatOverlay(Gtk.DrawingArea):
             y -= self.enter
             sprite = SPRITES["walk"][int(title.t * 6) % 2]
             flip = self.d < 0
+        elif self.mode == "roam":
+            (x, y), angle = self.paw_position(), 0.0
+            sprite = SPRITES["sit"][0] if self.rest > 0 else SPRITES["walk"][int(title.t * 6) % 2]
+            flip = self.d < 0
         elif self.mode == "playtime":
             # Sits ready and watches the pointer between hops
-            (x, y), angle = self.pt, 0.0
+            (x, y), angle = self.paw_position(), 0.0
             if self.pointer:
                 self.pt_flip = self.pointer[0] < x
             sprite = SPRITES["sit"][int(title.t * 3) % 2]
