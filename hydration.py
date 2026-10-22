@@ -138,7 +138,7 @@ class WaterGlasses(Gtk.DrawingArea):
                     surface = r == rows - 1 and (i not in self.fills or (x + int(now * 12)) % 3)
                     cr.set_source_rgba(*cat.hex_to_rgb(SURFACE if surface else WATER), 1)
                     cr.rectangle(x0 + x * P, y0 + y * P, P, P)
-            cr.fill()
+                    cr.fill()
             # A bubble rises in full glasses now and then
             if level >= 1 and (now + i * 0.7) % 4 < 1.2:
                 b = (now + i * 0.7) % 4 / 1.2
