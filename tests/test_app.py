@@ -220,6 +220,29 @@ class AppTest(unittest.TestCase):
             w.title_cat.forced = "sit"
 
         @step
+        def roam_start(w):
+            # Title scrolled away: the cat explores the window, always standing on something
+            r = next(c for c in [w.overlay.get_last_child()] if isinstance(c, cat.CatOverlay))
+            adj = w.scroll.get_vadjustment()
+            adj.set_value(adj.get_upper())
+            self.roam = []
+
+            def sample():
+                self.roam.append((r.mode, r.mode != "roam" or r.on_surface(), r.paw_position()))
+                return len(self.roam) < 40
+            GLib.timeout_add(100, sample)
+
+        @step
+        def roam_checked(w):
+            if len(self.roam) < 40 and not self.last_try:
+                return WAIT
+            roaming = [s for s in self.roam if s[0] == "roam"]
+            check(roaming, f"the cat never explored the window: {sorted(set(m for m, _o, _p in self.roam))}")
+            floating = [p for m, ok, p in roaming if not ok]
+            check(not floating, f"the cat stood on thin air at {floating[:3]}")
+            w.scroll.get_vadjustment().set_value(0)
+
+        @step
         def playtime_start(w):
             r = next(c for c in [w.overlay.get_last_child()] if isinstance(c, cat.CatOverlay))
             if r.mode != "title" and not self.last_try:
@@ -242,10 +265,11 @@ class AppTest(unittest.TestCase):
         def playtime_chase(w):
             r = next(c for c in [w.overlay.get_last_child()] if isinstance(c, cat.CatOverlay))
             x, y = r.paw_position()
-            reached = abs(x - (r.area_width() - 40)) < 25 and abs(y - (r.area_height() - 40)) < 25
+            sx, sy, _ok = r.anchor_pos(r.playtime_landing_spot())  # on whatever is under the pointer
+            reached = r.mode == "playtime" and abs(x - sx) < 25 and abs(y - sy) < 2 and r.on_surface()
             if not reached and not self.last_try:
                 return WAIT
-            check(reached, f"cat did not reach the pointer: {x:.0f},{y:.0f}")
+            check(reached, f"cat is not on what's under the pointer: paws {x:.0f},{y:.0f}, spot {sx:.0f},{sy:.0f}, {r.mode}")
             r.on_pointer_leave(None)
             r.pointer_left -= 5
 
@@ -269,7 +293,7 @@ class AppTest(unittest.TestCase):
             except Exception:
                 failures.append(f"{steps[i].__name__}: {traceback.format_exc()}")
             if i + 1 < len(steps):
-                wait = {roamer_in_bounds: 3500, side_panels: 1500, new_day: 1500,
+                wait = {roamer_in_bounds: 3500, roam_start: 1000, side_panels: 1500, new_day: 1500,
                         playtime_start: 2500, playtime_chase: 2000}.get(steps[i], 900)
                 GLib.timeout_add(wait, lambda: run(i + 1) and False)
             else:

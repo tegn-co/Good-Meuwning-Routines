@@ -50,6 +50,8 @@ def litres(glasses, glass_ml):
 class WaterGlasses(Gtk.DrawingArea):
     """The pixel glasses. Animations: a glass filling or emptying, the next one hopping, and a wave."""
 
+    cat_surface_offset = 8  # the cat can stand on the glasses (their tops, below the room for hopping)
+
     def __init__(self, on_click):
         super().__init__(halign=Gtk.Align.START)
         self.count, self.slots = 0, DEFAULTS["water_goal"]
