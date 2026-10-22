@@ -145,6 +145,15 @@ class AppTest(unittest.TestCase):
             box.undo()
 
         @step
+        def window_moved(w):
+            import cat_tricks
+            w.on_header_drag(None, 2, 1)
+            check(w.title_cat.treat not in cat_tricks.MOVE_TRICKS, "the cat reacted to a click, not a move")
+            w.on_header_drag(None, 30, 10)
+            check(w.title_cat.animation() in cat_tricks.MOVE_TRICKS, f"no reaction to moving: {w.title_cat.animation()}")
+            w.title_cat.treat = None
+
+        @step
         def cat_page(w):
             w.cat_btn.set_active(True)
 

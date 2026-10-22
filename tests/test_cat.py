@@ -60,6 +60,27 @@ class CatTest(unittest.TestCase):
         lunch = 0 <= c.minutes_into_lunch(__import__("datetime").datetime.now()) < c.lunch_duration()
         self.assertEqual(seen, {"drink", "eat" if lunch else "thirsty"})  # first drinks, then thirsty again
 
+    def test_window_moved_reactions(self):
+        import cat_tricks
+        for anim in cat_tricks.MOVE_TRICKS:
+            self.assertNotIn(anim, cat.ANIMATIONS)
+            c = cat.TitleCat(lambda: PAL)
+            surf = cairo.ImageSurface(cairo.FORMAT_ARGB32, 320, 86)
+            c.draw(None, cairo.Context(surf), 320, 86)
+            c.play(anim, 2.0)
+            for _ in range(30):
+                c.last -= 0.05
+                c.tick(None, None)
+                c.draw(None, cairo.Context(surf), 320, 86)
+            self.assertEqual(c.anim, anim)
+        # Moved again and again: grumpy
+        c = cat.TitleCat(lambda: PAL)
+        for i in range(3):
+            c.t, c.treat = i * 5.0, None
+            cat_tricks.window_moved(c)
+        self.assertEqual(c.treat, "grumpy")
+        self.assertTrue(c.speech or c.happy_until)
+
     def test_maine_coon_is_bigger(self):
         g = cat.MAINE_COON_GROWTH
         for name, frames in cat.FILL.items():
