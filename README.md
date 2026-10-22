@@ -49,7 +49,8 @@ eats lunch, chases butterflies and laser dots, hides in boxes and cheers when yo
   <tr>
     <td align="center"><img src="docs/cat-love.png" width="110"><br><sub><b>♥</b><br>click the title</sub></td>
     <td align="center" colspan="3"><sub><b>jump</b> – hops between the words · <b>climb</b> – walks around the window frame<br><br>
-    Scroll the title away and the cat climbs into the frame to keep you company.<br>
+    Scroll the title away and the cat jumps down to keep you company – it walks on the text, lines and boxes,<br>
+    hops between them and falls onto whatever is below if its spot scrolls away. It never stands on thin air.<br>
     It yawns in the morning and gets sleepy after 16:00.<br>
     Drag the window and it reacts – stressed, grumpy or having the time of its life (drag it too often and it gets grumpy).</sub></td>
   </tr>
