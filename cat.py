@@ -37,6 +37,7 @@ gi.require_version("PangoCairo", "1.0")
 gi.require_version("Graphene", "1.0")
 from gi.repository import GLib, Graphene, Gtk, Pango, PangoCairo  # noqa: E402
 
+import platforms  # noqa: E402
 from database import CONFIG_DIR  # noqa: E402  (same config dir as the rest of the app, follows XDG_CONFIG_HOME)
 from translations import _  # noqa: E402
 
@@ -656,7 +657,7 @@ class TitleCat(Gtk.DrawingArea):
 
     def layout(self, cr, text=None):
         lay = PangoCairo.create_layout(cr)
-        lay.set_font_description(Pango.FontDescription.from_string(f"Silkscreen {self.font_px}px"))
+        lay.set_font_description(Pango.FontDescription.from_string(f"{platforms.font_families('Silkscreen')} {self.font_px}px"))
         text = self.title if text is None else text
         lay.set_text(text, -1)
         return lay
@@ -1087,7 +1088,7 @@ class TitleCat(Gtk.DrawingArea):
                 cr.set_source_rgba(*hex_to_rgb(pal["muted"]), 1 - phase / 0.7)
                 cr.move_to(bx + 22 + phase * 8, top - 30 - phase * 18)
                 nom = self.layout(cr, _("nom"))
-                nom.set_font_description(Pango.FontDescription.from_string("Silkscreen 8px"))
+                nom.set_font_description(Pango.FontDescription.from_string(f"{platforms.font_families('Silkscreen')} 8px"))
                 PangoCairo.show_layout(cr, nom)
 
         if self.t < self.speech_until:
@@ -1099,7 +1100,7 @@ class TitleCat(Gtk.DrawingArea):
     def draw_speech_bubble(self, cr, pal, width, cx, bottom):
         """Pixel speech bubble with a tail pointing down at the cat."""
         lay = self.layout(cr, self.speech)
-        lay.set_font_description(Pango.FontDescription.from_string("Silkscreen 8px"))
+        lay.set_font_description(Pango.FontDescription.from_string(f"{platforms.font_families('Silkscreen')} 8px"))
         _, log = lay.get_pixel_extents()
         w, h = log.width + 10, log.height + 6
         x = round(max(1, min(width - w - 1, cx - w / 2)))

@@ -129,6 +129,22 @@ class AppTest(unittest.TestCase):
             wmod.fetch_forecast = self.real_fetch
 
         @step
+        def cat_page(w):
+            w.cat_btn.set_active(True)
+
+        @step
+        def cat_colors_fit(w):
+            # Every color can be changed without scrolling the cat page (fonts and widgets are bigger on Windows)
+            last = list(w.cat_panel.color_btns.values())[-1]
+            ok, box = last.compute_bounds(w.side)
+            if not (ok and w.side.get_width() > 200) and not self.last_try:
+                return WAIT  # the panel is still sliding open
+            bottom = box.get_y() + box.get_height() if ok else -1
+            check(ok and 0 < bottom <= w.side.get_height(),
+                  f"cat colors need scrolling: last color ends at {bottom:.0f}, panel is {w.side.get_height()} high")
+            w.cat_btn.set_active(False)
+
+        @step
         def side_panels(w):
             for b in (w.cat_btn, w.settings_btn, w.pomo_btn, w.side_btn):
                 b.set_active(True)

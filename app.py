@@ -1432,7 +1432,7 @@ class App(Adw.Application):
                 self.colors = Gtk.CssProvider()
                 Gtk.StyleContext.add_provider_for_display(display, self.colors, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
                 css = Gtk.CssProvider()
-                css.load_from_string(CSS + POMODORO_CSS)
+                css.load_from_string(platforms.with_symbol_fonts(CSS + POMODORO_CSS))
                 Gtk.StyleContext.add_provider_for_display(display, css, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION + 1)
                 Adw.StyleManager.get_default().connect("notify::dark", lambda *_: self.apply_colors())
             # --cat=<name> forces a specific cat animation (for testing)
