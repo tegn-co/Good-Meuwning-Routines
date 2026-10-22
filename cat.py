@@ -79,9 +79,13 @@ EVENTS = [
     ("start", "a focus session starts"),
     ("break", "time for a break"),
     ("focus", "the break is over"),
+    ("water", "you drink a glass of water"),
+    ("water_goal", "you reach your water goal"),
+    ("thirsty", "you forget to drink"),
 ]
 PHRASES = {"check": _("good job!"), "all_done": _("all done!"), "click": "",
-           "start": _("let's go!"), "break": _("break time!"), "focus": _("focus time!")}
+           "start": _("let's go!"), "break": _("break time!"), "focus": _("focus time!"),
+           "water": _("slurp!|cheers!|ahh!"), "water_goal": _("well hydrated!"), "thirsty": _("water?|thirsty…")}
 DEFAULT_PHRASES = dict(PHRASES)
 
 COLORS = dict(BREEDS["orange tabby"], c="#5aa9e6", f="#9a5b2e",  # c/f = food bowl
@@ -617,6 +621,8 @@ class TitleCat(Gtk.DrawingArea):
         self.palette = palette  # function returning the current colors (light/dark)
         self.forced = forced  # force a specific animation (for testing)
         self.mode = None  # set by the pomodoro panel while the timer runs
+        self.treat, self.treat_until = None, 0.0  # a short animation on demand, see play()
+        self.thirsty = False  # set by the water glasses when it's time for a glass
         self.x, self.dir = 0.0, 1
         self.t = 0.0
         self.last = time.monotonic()
@@ -646,11 +652,15 @@ class TitleCat(Gtk.DrawingArea):
     def animation(self):
         if self.forced in ANIMATIONS + ["eat"]:
             return self.forced
+        if self.treat and self.t < self.treat_until:
+            return self.treat
         if self.mode:
             return self.mode
         now = datetime.now()
         if 0 <= self.minutes_into_lunch(now) < self.lunch_duration():
             return "eat"
+        if self.thirsty:
+            return "thirsty"
         if now.hour >= 16 and (now.hour * 60 + now.minute) // SWITCH_MINUTES % 2 == 0:
             return "sleep"  # sleepy in the afternoon: sleeps every other quarter hour
         return ANIMATIONS[(now.hour * 60 + now.minute) // SWITCH_MINUTES % len(ANIMATIONS)]
@@ -889,6 +899,10 @@ class TitleCat(Gtk.DrawingArea):
                 self.on_playtime()
                 return
         self.react_to("click")
+
+    def play(self, anim, seconds):
+        """Show an animation for a few seconds, e.g. "drink" when you drink a glass of water."""
+        self.treat, self.treat_until = anim, self.t + seconds
 
     def say(self, text, seconds=2.0):
         if text:

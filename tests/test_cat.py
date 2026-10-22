@@ -41,6 +41,25 @@ class CatTest(unittest.TestCase):
                 c.say("good job!")
                 c.draw(None, cr, 320, 86)
 
+    def test_water_tricks(self):
+        """drink and thirsty are only shown by the water glasses, not in the rotation."""
+        import cat_tricks
+        for anim in cat_tricks.WATER_TRICKS:
+            self.assertNotIn(anim, cat.ANIMATIONS)
+        c = cat.TitleCat(lambda: PAL)
+        surf = cairo.ImageSurface(cairo.FORMAT_ARGB32, 320, 86)
+        c.draw(None, cairo.Context(surf), 320, 86)
+        c.thirsty = True
+        c.play("drink", 1.0)
+        seen = set()
+        for _ in range(60):
+            c.last -= 0.05
+            c.tick(None, None)
+            c.draw(None, cairo.Context(surf), 320, 86)
+            seen.add(c.anim)
+        lunch = 0 <= c.minutes_into_lunch(__import__("datetime").datetime.now()) < c.lunch_duration()
+        self.assertEqual(seen, {"drink", "eat" if lunch else "thirsty"})  # first drinks, then thirsty again
+
     def test_maine_coon_is_bigger(self):
         g = cat.MAINE_COON_GROWTH
         for name, frames in cat.FILL.items():

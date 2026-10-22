@@ -128,6 +128,10 @@ def connect():
                                                THEN 0 ELSE ? END
                WHERE expected IS NULL AND hours IS NOT NULL""", (EXPECTED_HOURS,))
         conn.commit()
+    if "water" not in cols:
+        # Glasses of water drunk that day, and when the last one was (hydration.py)
+        add_column_if_missing(conn, "ALTER TABLE days ADD COLUMN water INTEGER NOT NULL DEFAULT 0")
+        add_column_if_missing(conn, "ALTER TABLE days ADD COLUMN water_at TEXT")
     # Item order (fixed and routine items), shared by all days
     conn.execute("CREATE TABLE IF NOT EXISTS item_order (key TEXT PRIMARY KEY, position INTEGER NOT NULL)")
     # Fixed items (01–05) deleted in settings; can be restored
@@ -172,7 +176,7 @@ def unfinished_plan_tasks(plan, checks):
 def load_day(day):
     with session() as conn:
         row = conn.execute(
-            "SELECT checks, plan, meetings, hours, day_off FROM days WHERE date = ?", (day.isoformat(),)
+            "SELECT checks, plan, meetings, hours, day_off, water, water_at FROM days WHERE date = ?", (day.isoformat(),)
         ).fetchone()
         routine = [{"id": r[0], "text": r[1]} for r in conn.execute("SELECT id, text FROM routine ORDER BY position")]
         order = [r[0] for r in conn.execute("SELECT key FROM item_order ORDER BY position")]
@@ -190,21 +194,24 @@ def load_day(day):
     if fresh:
         # New day: carry over unfinished plan tasks (keep hours logged in advance)
         plan = "\n".join(f"- {t}" for t in unfinished_plan_tasks(*prev)) if prev else ""
-        hours, day_off = (row[3], bool(row[4])) if row else (None, False)
-        return {"checks": {}, "plan": plan, "meetings": [], "hours": hours, "day_off": day_off, **shared}
+        hours, day_off, water, water_at = (row[3], bool(row[4]), row[5], row[6]) if row else (None, False, 0, None)
+        return {"checks": {}, "plan": plan, "meetings": [], "hours": hours, "day_off": day_off,
+                "water": water, "water_at": water_at, **shared}
     return {"checks": json.loads(row[0]), "plan": row[1], "meetings": json.loads(row[2]),
-            "hours": row[3], "day_off": bool(row[4]), **shared}
+            "hours": row[3], "day_off": bool(row[4]), "water": row[5], "water_at": row[6], **shared}
 
 
 def save_day(day, state):
     with session() as conn:
         conn.execute(
-            """INSERT INTO days (date, checks, plan, meetings, updated_at, hours, day_off, expected, complete)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """INSERT INTO days (date, checks, plan, meetings, updated_at, hours, day_off, expected, complete,
+                                 water, water_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                ON CONFLICT(date) DO UPDATE SET
                  checks = excluded.checks, plan = excluded.plan, meetings = excluded.meetings,
                  updated_at = excluded.updated_at, hours = excluded.hours, day_off = excluded.day_off,
-                 expected = excluded.expected, complete = excluded.complete""",
+                 expected = excluded.expected, complete = excluded.complete,
+                 water = excluded.water, water_at = excluded.water_at""",
             (
                 day.isoformat(),
                 json.dumps(state["checks"]),
@@ -215,6 +222,8 @@ def save_day(day, state):
                 int(bool(state.get("day_off"))),
                 expected_hours_for(day, state.get("day_off")),
                 int(bool(state.get("complete"))),
+                int(state.get("water") or 0),
+                state.get("water_at"),
             ),
         )
         conn.execute("DELETE FROM hidden_items")

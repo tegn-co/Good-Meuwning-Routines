@@ -1,7 +1,7 @@
 """Runs the whole app (needs a display; in CI: xvfb-run) through a new user's flow."""
 import traceback
 import unittest
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 
 from tests import env
 import gi
@@ -127,6 +127,22 @@ class AppTest(unittest.TestCase):
             check(w.weather_row.get_visible() and w.weather_lbl.get_label() == "7° · 3–9° · rain 80%",
                   f"weather row: {w.weather_lbl.get_label()!r}")
             wmod.fetch_forecast = self.real_fetch
+
+        @step
+        def water(w):
+            box = w.water_box
+            check(box.get_visible() and box.count == 0, "water row missing or not empty")
+            box.on_glass(3)  # any empty glass: drink one
+            check((w.state["water"], w.title_cat.animation()) == (1, "drink"), f"drinking: {w.state.get('water')}, cat {w.title_cat.animation()}")
+            check("1 / 8" in box.amount.get_label(), f"water amount: {box.amount.get_label()!r}")
+            box.on_glass(0)  # the last full glass: undo
+            check(w.state["water"] == 0, "undo did not empty the glass")
+            box.since = box.last = datetime.now() - timedelta(hours=2)
+            box.check()
+            check(w.title_cat.thirsty and box.has_css_class("attention"), "not thirsty after two hours")
+            box.drink()
+            check(not w.title_cat.thirsty and not box.has_css_class("attention"), "still thirsty after a glass")
+            box.undo()
 
         @step
         def cat_page(w):
