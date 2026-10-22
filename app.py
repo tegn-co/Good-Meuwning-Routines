@@ -22,6 +22,7 @@ from pomodoro_panel import CSS as POMODORO_CSS, PomodoroPanel  # noqa: E402
 from cat_panel import CatPanel  # noqa: E402
 import cat as catmod  # noqa: E402
 import database as db  # noqa: E402
+import hydration  # noqa: E402
 import schedule  # noqa: E402
 from tutorial import Tutorial  # noqa: E402
 import updater  # noqa: E402
@@ -316,6 +317,10 @@ class MainWindow(Adw.ApplicationWindow):
         self.hours_box.append(bal)
         body.append(self.hours_box)
 
+        # --- Water: click a glass per drink; the cat drinks along (hydration.py) ---
+        self.water_box = hydration.WaterBox(self.title_cat, self.on_water_changed)
+        body.append(self.water_box)
+
         self.footer = label("", "pixel", "muted", "detail")
         self.footer.set_xalign(0.5)
         self.footer.set_margin_top(14)
@@ -391,6 +396,7 @@ class MainWindow(Adw.ApplicationWindow):
     def on_clock_tick(self):
         self.check_new_day()
         self.react_to_progress()
+        self.water_box.check()
         self.check_for_update()
         if self.close_at is None or datetime.now() < self.close_at:
             return True
@@ -475,6 +481,7 @@ class MainWindow(Adw.ApplicationWindow):
         self.render_plan_items()
         self.hours.set_value(self.state["hours"] or 0)
         self.day_off.set_active(self.state["day_off"])
+        self.water_box.show_day(self.state.get("water", 0), self.state.get("water_at"))
         self.loading = False
         self.loaded = True
         self.scroll.set_sensitive(True)
@@ -564,6 +571,10 @@ class MainWindow(Adw.ApplicationWindow):
         if ok:
             adj.set_value(point.y - 20)
         return False
+
+    def on_water_changed(self, glasses, last_glass):
+        self.state["water"], self.state["water_at"] = glasses, last_glass
+        self.save()
 
     def on_day_off_changed(self, check):
         if self.loading:
@@ -739,6 +750,7 @@ class MainWindow(Adw.ApplicationWindow):
         page.append(self.backup_status)
 
         self.build_weather_settings(page)
+        hydration.build_settings(page, lambda: self.water_box.apply_settings())
 
         heading = label("language", "num")
         heading.set_margin_top(14)
@@ -1432,7 +1444,7 @@ class App(Adw.Application):
                 self.colors = Gtk.CssProvider()
                 Gtk.StyleContext.add_provider_for_display(display, self.colors, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
                 css = Gtk.CssProvider()
-                css.load_from_string(platforms.with_symbol_fonts(CSS + POMODORO_CSS))
+                css.load_from_string(platforms.with_symbol_fonts(CSS + POMODORO_CSS + hydration.CSS))
                 Gtk.StyleContext.add_provider_for_display(display, css, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION + 1)
                 Adw.StyleManager.get_default().connect("notify::dark", lambda *_: self.apply_colors())
             # --cat=<name> forces a specific cat animation (for testing)

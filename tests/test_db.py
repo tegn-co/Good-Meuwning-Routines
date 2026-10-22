@@ -23,6 +23,12 @@ class DbTest(unittest.TestCase):
         d = db.load_day(MON)
         self.assertEqual((d["checks"], d["plan"], d["hours"], d["routine"]), ({}, "", None, []))
 
+    def test_water_is_saved_per_day(self):
+        db.save_day(MON, state(water=5, water_at="2026-10-12T13:05:00"))
+        self.assertEqual((db.load_day(MON)["water"], db.load_day(MON)["water_at"]), (5, "2026-10-12T13:05:00"))
+        tue = db.load_day(MON + timedelta(days=1))
+        self.assertEqual((tue["water"], tue["water_at"]), (0, None))  # a new day starts with empty glasses
+
     def test_overtime_weekend_and_day_off(self):
         db.save_day(MON, state(hours=9))                     # +1
         db.set_logged_hours(MON + timedelta(days=1), 3, True)        # day off: +3

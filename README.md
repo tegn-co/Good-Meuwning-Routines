@@ -20,6 +20,7 @@ eats lunch, chases butterflies and laser dots, hides in boxes and cheers when yo
 | ☀️ **Morning checklist** | Email, Jira, today's meetings, meeting prep and a plan for the day – plus your own routine items that come back every day. Drag the numbers to reorder; delete items under ⚙ (it asks twice). |
 | 📝 **Plan for the day** | Write tasks as `- task` lines and check them off in the side panel. Unfinished tasks move to tomorrow. |
 | ⏱ **Hours & overtime** | A reminder at 15:00 to log your hours; the overtime balance adds up for you. Weekends and days off expect 0 h, and you can fix past days under ⚙. |
+| 💧 **Water** | Click a pixel glass each time you drink – the glass fills up and the cat laps from its own bowl. Forget to drink for an hour and the next glass hops, the cat sits by its empty bowl, and (if you like) you get a notification. Goal, glass size and reminder under ⚙. |
 | 🌦 **Weather** | Pick your city and today's weather shows under the date – and the cat tells you to take an umbrella. |
 | 🔥 **Streaks** | Finish the whole list several working days in a row – the cat notices and unlocks things to wear. |
 | 🍅 **Pomodoro** | Focus timer with adjustable lengths. The cat sleeps while you work, plays in short breaks and eats in the long one. |

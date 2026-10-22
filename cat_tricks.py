@@ -1,4 +1,5 @@
-"""Ten more cat animations on the title, kept apart from cat.py so each one is easy to read.
+"""Ten more cat animations on the title, kept apart from cat.py so each one is easy to read,
+plus two that only the water glasses use (drink and thirsty, see hydration.py).
 
 Each trick has start() (place the cat), tick() (move things on) and draw() (pick the cat sprite and
 draw props behind it); draw_front() draws props in front of the cat. TitleCat picks them from TRICKS.
@@ -11,11 +12,14 @@ import cat
 PX = cat.PX
 CW = 20 * PX  # the walking cat's width
 
-# Props (fill only; the outline is added). x/X = box, n/N/Y = bird, Z/z = yarn
+# Props (fill only; the outline is added). x/X = box, n/N/Y = bird, Z/z = yarn, m/a/A = water bowl
 BOX = ["XXXXXXXXXXXXXX", "xxxxxxxxxxxxxx", "xxxxxxxxxxxxxx", "xxxxxXXXXxxxxx", "xxxxxxxxxxxxxx", "xxxxxxxxxxxxxx"]
 BIRD = [[".nn..", "nnnnY", ".NNn.", "..n.."], ["N...N", ".NnN.", ".nnnY", "..n.."]]  # perched, flying
 YARN = [[".ZZZZ.", "ZzZZzZ", "ZZzzZZ", "ZzZZzZ", ".ZZZZ."], [".ZZZZ.", "ZZzZZZ", "ZzZZzZ", "ZZZzZZ", ".ZZZZ."]]
-cat.COLORS.update(x="#c8955a", X="#9c6a35", n="#8b5a3c", N="#5e3b26", Y="#ffc93c", Z="#e86a92", z="#b8456b")
+WATER_BOWL = [["..aaaaaa..", ".aAaaaaAa.", "mmmmmmmmmm", ".mmmmmmmm.", "..mmmmmm.."],
+              ["..aaaaaa..", ".aaaAaaaa.", "mmmmmmmmmm", ".mmmmmmmm.", "..mmmmmm.."]]  # two ripples
+cat.COLORS.update(x="#c8955a", X="#9c6a35", n="#8b5a3c", N="#5e3b26", Y="#ffc93c", Z="#e86a92", z="#b8456b",
+                  m="#e6e1d6", a="#5cb8ff", A="#d6f0ff")
 LASER = "#ff2a2a"
 
 
@@ -57,7 +61,8 @@ cat.FILL["knead"] = [_sit_with({(3, 5): "o", (3, 9): "o", (12, 5): ".", (12, 6):
                      _sit_with({(3, 5): "o", (3, 9): "o", (12, 8): ".", (12, 9): ".", (11, 8): "w", (11, 9): "w"})]
 cat.set_shape(cat.SETTINGS["shape"])  # rebuild SPRITES with the new poses
 PROPS = {"box": cat.add_outline(BOX), "bird": [cat.add_outline(b) for b in BIRD],
-         "yarn": [cat.add_outline(y) for y in YARN]}
+         "yarn": [cat.add_outline(y) for y in YARN],
+         "water": [cat.add_outline(b) for b in WATER_BOWL], "empty_water": cat.add_outline(WATER_BOWL[0][2:])}
 
 
 def _hop(t, duration, height):
@@ -348,7 +353,44 @@ class Yarn(Trick):
         return (cat.SPRITES["walk"][int(c.t * 6) % 2] if moving else cat.SPRITES["sit"][0]), 0
 
 
+class Drink(Trick):
+    """Laps water from its bowl while you drink a glass; little drops jump out."""
+
+    def start(self, c, lo, hi):
+        c.x, c.dir = max(lo, min(hi - CW - 10 * PX, c.x)), 1
+
+    def draw(self, c, cr, top, pal):
+        return cat.SPRITES["eat"][int(c.t * 4) % 2], 0
+
+    def draw_front(self, c, cr, top, pal, cat_y):
+        bowl = PROPS["water"][int(c.t * 4) % 2]
+        bx, by = c.x + 16 * PX, top - cat.sprite_size(bowl)[1] * PX + PX
+        c.draw_sprite(cr, bowl, bx, by)  # in front, so the head dips into it
+        for i in range(2):
+            phase = (c.t * 1.4 + i / 2) % 1
+            cr.set_source_rgba(*cat.hex_to_rgb(cat.COLORS["a"]), 1 - phase)
+            cr.rectangle(round(bx + (3 + i * 4) * PX + math.sin(phase * 5 + i) * 2), round(by - phase * 12), PX, PX)
+            cr.fill()
+
+
+class Thirsty(Trick):
+    """Sits by its empty water bowl and pats it now and then, until you drink something."""
+
+    def start(self, c, lo, hi):
+        c.x, c.dir = max(lo, min(hi - CW - 10 * PX, c.x)), 1
+
+    def draw(self, c, cr, top, pal):
+        return cat.SPRITES["sit"][2 if c.t % 3 < 0.35 else 0], 0
+
+    def draw_front(self, c, cr, top, pal, cat_y):
+        bowl = PROPS["empty_water"]
+        pat = PX if c.t % 3 < 0.35 else 0  # the bowl jiggles when patted
+        c.draw_sprite(cr, bowl, c.x + 14 * PX + pat, top - cat.sprite_size(bowl)[1] * PX + PX)
+
+
 TRICKS = {"zoomies": Zoomies(), "tailchase": TailChase(), "loaf": Loaf(), "box": Box(), "knead": Knead(),
           "laser": Laser(), "wave": Wave(), "bird": Bird(), "roll": Roll(), "yarn": Yarn()}
 cat.TRICKS.update(TRICKS)
 cat.ANIMATIONS.extend(TRICKS)
+WATER_TRICKS = {"drink": Drink(), "thirsty": Thirsty()}  # not in the rotation: only when you drink, or forget to
+cat.TRICKS.update(WATER_TRICKS)
