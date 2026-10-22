@@ -278,4 +278,11 @@ NB = {
     "glass size (ml)": "glasstørrelse (ml)",
     "remind me after (min, 0 = off)": "minn meg på etter (min, 0 = av)",
     "also as a desktop notification": "også som skrivebordsvarsel",
+    # The cat when the window is moved (cat_tricks.window_moved)
+    "you move the window (stressed)": "du flytter vinduet (stresset)",
+    "you move the window (grumpy)": "du flytter vinduet (hissig)",
+    "you move the window (having fun)": "du flytter vinduet (gøy)",
+    "whoa!|careful!|aaah!": "oi!|forsiktig!|aaah!",
+    "hey!|hsss!|grr!": "hei!|hsss!|grr!",
+    "wheee!|again!|weee!": "wiii!|igjen!|weee!",
 }

@@ -1,5 +1,6 @@
 """Ten more cat animations on the title, kept apart from cat.py so each one is easy to read,
-plus two that only the water glasses use (drink and thirsty, see hydration.py).
+plus two that only the water glasses use (drink and thirsty, see hydration.py) and three reactions
+to the window being moved (stressed, grumpy and having fun, see window_moved()).
 
 Each trick has start() (place the cat), tick() (move things on) and draw() (pick the cat sprite and
 draw props behind it); draw_front() draws props in front of the cat. TitleCat picks them from TRICKS.
@@ -394,3 +395,99 @@ cat.TRICKS.update(TRICKS)
 cat.ANIMATIONS.extend(TRICKS)
 WATER_TRICKS = {"drink": Drink(), "thirsty": Thirsty()}  # not in the rotation: only when you drink, or forget to
 cat.TRICKS.update(WATER_TRICKS)
+
+
+# --- Reactions when the window is moved ---
+ANGER = ["r.r.r", ".....", "r...r", ".....", "r.r.r"]  # a little "anger mark" over the head
+SWEAT = "#7fc8ff"
+
+
+class Stressed(Trick):
+    """Clings on and trembles, with drops of sweat, while the letters shiver."""
+
+    def start(self, c, lo, hi):
+        super().start(c, lo, hi)
+        c.shake_x = c.x
+
+    def tick(self, c, dt, lo, hi):
+        c.x = c.shake_x + (PX if int(c.t * 30) % 2 else -PX)
+        if random.random() < dt * 12:
+            c.bounce_letter(random.uniform(lo, hi), 25)
+
+    def draw(self, c, cr, top, pal):
+        return cat.SPRITES["sit"][0], -PX if int(c.t * 15) % 2 else 0
+
+    def draw_front(self, c, cr, top, pal, cat_y):
+        for i in range(2):
+            phase = (c.t * 1.6 + i / 2) % 1
+            cr.set_source_rgba(*cat.hex_to_rgb(SWEAT), 1 - phase)
+            x = c.shake_x + (11 + i * 3) * PX + phase * 6
+            cr.rectangle(round(x), round(cat_y + 2 * PX + phase * 14), PX, 2 * PX)
+            cr.fill()
+
+
+class Grumpy(Trick):
+    """Swats at you with an anger mark over its head, stomping the letter it sits on."""
+
+    def start(self, c, lo, hi):
+        super().start(c, lo, hi)
+        c.swat_frame = 0
+
+    def tick(self, c, dt, lo, hi):
+        frame = int(c.t * 5) % 2
+        if frame != c.swat_frame:
+            c.swat_frame = frame
+            if frame:
+                c.bounce_letter(c.x + 12 * PX, 60)
+
+    def draw(self, c, cr, top, pal):
+        return cat.SPRITES["sit"][2 if int(c.t * 5) % 2 else 0], 0
+
+    def draw_front(self, c, cr, top, pal, cat_y):
+        if int(c.t * 4) % 3:  # the mark pulses
+            c.draw_sprite(cr, ANGER, c.x + 14 * PX, cat_y - 3 * PX, colors={"r": "#ff3b3b"})
+
+
+class Wheee(Trick):
+    """Loves the ride: bounces back and forth on the letters with little sparkles."""
+    moving = True
+
+    def start(self, c, lo, hi):
+        super().start(c, lo, hi)
+        c.ride_from = c.x
+        c.landed = True
+
+    def tick(self, c, dt, lo, hi):
+        c.x = max(lo, min(hi - CW, c.ride_from + math.sin(c.t * 2.5) * 40))
+        c.dir = 1 if math.cos(c.t * 2.5) > 0 else -1
+        up = abs(math.sin(c.t * 6)) > 0.2
+        if not up and c.landed is False:
+            c.bounce_letter(c.x + CW / 2, 50)
+        c.landed = not up
+
+    def draw(self, c, cr, top, pal):
+        return cat.SPRITES["run"][0], -abs(math.sin(c.t * 6)) * 14
+
+    def draw_front(self, c, cr, top, pal, cat_y):
+        for i in range(3):
+            phase = (c.t * 1.2 + i / 3) % 1
+            cr.set_source_rgba(*cat.hex_to_rgb(cat.COLORS["Y"]), 1 - phase)
+            x = c.x + CW / 2 + math.sin(i * 2.1 + c.t) * 22
+            cr.rectangle(round(x), round(cat_y - phase * 12), PX, PX)
+            cr.fill()
+
+
+MOVE_TRICKS = {"stressed": Stressed(), "grumpy": Grumpy(), "wheee": Wheee()}  # only when the window is moved
+cat.TRICKS.update(MOVE_TRICKS)
+MOVE_EVENTS = {"stressed": "moved_stressed", "grumpy": "moved_grumpy", "wheee": "moved_fun"}
+
+
+def window_moved(c):
+    """The window is being dragged: the cat reacts – stressed, grumpy or having fun.
+    Moved again and again within 20 seconds, it gets grumpy."""
+    c.moved_at = [t for t in getattr(c, "moved_at", []) if c.t - t < 20] + [c.t]
+    if c.treat in MOVE_TRICKS and c.t < c.treat_until:
+        return  # already reacting to this move
+    mood = "grumpy" if len(c.moved_at) >= 3 else random.choice(list(MOVE_TRICKS))
+    c.play(mood, 3.5)
+    c.react_to(MOVE_EVENTS[mood], 2.5)

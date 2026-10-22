@@ -82,10 +82,15 @@ EVENTS = [
     ("water", "you drink a glass of water"),
     ("water_goal", "you reach your water goal"),
     ("thirsty", "you forget to drink"),
+    ("moved_stressed", "you move the window (stressed)"),
+    ("moved_grumpy", "you move the window (grumpy)"),
+    ("moved_fun", "you move the window (having fun)"),
 ]
 PHRASES = {"check": _("good job!"), "all_done": _("all done!"), "click": "",
            "start": _("let's go!"), "break": _("break time!"), "focus": _("focus time!"),
-           "water": _("slurp!|cheers!|ahh!"), "water_goal": _("well hydrated!"), "thirsty": _("water?|thirsty…")}
+           "water": _("slurp!|cheers!|ahh!"), "water_goal": _("well hydrated!"), "thirsty": _("water?|thirsty…"),
+           "moved_stressed": _("whoa!|careful!|aaah!"), "moved_grumpy": _("hey!|hsss!|grr!"),
+           "moved_fun": _("wheee!|again!|weee!")}
 DEFAULT_PHRASES = dict(PHRASES)
 
 COLORS = dict(BREEDS["orange tabby"], c="#5aa9e6", f="#9a5b2e",  # c/f = food bowl

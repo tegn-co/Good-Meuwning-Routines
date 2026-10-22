@@ -50,7 +50,8 @@ eats lunch, chases butterflies and laser dots, hides in boxes and cheers when yo
     <td align="center"><img src="docs/cat-love.png" width="110"><br><sub><b>♥</b><br>click the title</sub></td>
     <td align="center" colspan="3"><sub><b>jump</b> – hops between the words · <b>climb</b> – walks around the window frame<br><br>
     Scroll the title away and the cat climbs into the frame to keep you company.<br>
-    It yawns in the morning and gets sleepy after 16:00.</sub></td>
+    It yawns in the morning and gets sleepy after 16:00.<br>
+    Drag the window and it reacts – stressed, grumpy or having the time of its life (drag it too often and it gets grumpy).</sub></td>
   </tr>
 </table>
 

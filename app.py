@@ -21,6 +21,7 @@ from cat import CatOverlay, TitleCat  # noqa: E402
 from pomodoro_panel import CSS as POMODORO_CSS, PomodoroPanel  # noqa: E402
 from cat_panel import CatPanel  # noqa: E402
 import cat as catmod  # noqa: E402
+import cat_tricks  # noqa: E402
 import database as db  # noqa: E402
 import hydration  # noqa: E402
 import schedule  # noqa: E402
@@ -136,6 +137,12 @@ class MainWindow(Adw.ApplicationWindow):
         self.settings_btn.connect("toggled", self.on_side_toggled, "settings")
         header.pack_start(self.settings_btn)
         root.append(header)
+        # Dragging the header bar moves the window: the cat reacts. Capture phase, so we see the drag before
+        # the window handle hands it to the window manager (GTK can't see the window's position on Wayland)
+        drag = Gtk.GestureDrag(propagation_phase=Gtk.PropagationPhase.CAPTURE)
+        drag.connect("drag-begin", lambda *_a: setattr(self, "move_noticed", False))
+        drag.connect("drag-update", self.on_header_drag)
+        header.add_controller(drag)
 
         self.scroll = scroll = Gtk.ScrolledWindow(vexpand=True, hexpand=True, hscrollbar_policy=Gtk.PolicyType.NEVER, width_request=MAIN_W)
         body = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, margin_start=18, margin_end=18, margin_bottom=14)
@@ -571,6 +578,11 @@ class MainWindow(Adw.ApplicationWindow):
         if ok:
             adj.set_value(point.y - 20)
         return False
+
+    def on_header_drag(self, _gesture, dx, dy):
+        if not getattr(self, "move_noticed", False) and dx * dx + dy * dy > 36:  # 6 px: not just a click on a button
+            self.move_noticed = True
+            cat_tricks.window_moved(self.title_cat)
 
     def on_water_changed(self, glasses, last_glass):
         self.state["water"], self.state["water_at"] = glasses, last_glass
