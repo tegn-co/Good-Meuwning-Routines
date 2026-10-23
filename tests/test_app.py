@@ -240,6 +240,15 @@ class AppTest(unittest.TestCase):
             check(roaming, f"the cat never explored the window: {sorted(set(m for m, _o, _p in self.roam))}")
             floating = [p for m, ok, p in roaming if not ok]
             check(not floating, f"the cat stood on thin air at {floating[:3]}")
+            r = next(c for c in [w.overlay.get_last_child()] if isinstance(c, cat.CatOverlay))
+            for x, y in ((-30, r.area_height() + 30), (r.area_width() + 30, -30), (40, r.area_height())):
+                check(r.surface_below(x, y) is not None, f"nothing below {x},{y}")  # the floor at least
+            # A bug in one animation step must not freeze the cat (GLib drops a timer that raises)
+            real, r.roam_tick = r.roam_tick, None  # calling None raises a TypeError
+            r.mode = "roam"
+            check(r.tick(None, None) is True and r.mode == "title", "an error stopped the cat's animation")
+            r.roam_tick = real
+            check((platforms.cache_dir() / "errors.log").exists(), "the error was not logged")
             w.scroll.get_vadjustment().set_value(0)
 
         @step

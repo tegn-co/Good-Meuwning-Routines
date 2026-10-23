@@ -27,6 +27,7 @@ import math
 import cairo
 import random
 import time
+import traceback
 from datetime import datetime
 from pathlib import Path
 
@@ -602,6 +603,20 @@ _BOWL = ["..ffffff..", ".ffffffff.", "cccccccccc", ".cccccccc.", "..cccccc.."]
 BOWLS = [add_outline(_BOWL[2 - food:]) for food in (2, 1, 0)]  # full, half, empty
 
 
+def log_error(where):
+    """Write the current exception to errors.log in the cache folder (kept small) and to stderr."""
+    traceback.print_exc()
+    try:
+        path = platforms.cache_dir() / "errors.log"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        if path.exists() and path.stat().st_size > 200_000:
+            path.unlink()
+        with path.open("a", encoding="utf-8") as f:
+            f.write(f"{datetime.now():%Y-%m-%d %H:%M:%S} {where}\n{traceback.format_exc()}\n")
+    except OSError:
+        pass
+
+
 def was_closed(widget):
     """True once the widget has been in a window that is now closed (its timer then stops)."""
     if widget.get_root() is not None:
@@ -702,6 +717,16 @@ class TitleCat(Gtk.DrawingArea):
 
     # --- animation ---
     def tick(self, widget, clock):
+        """One animation step. An error is logged and the cat carries on – an exception escaping a
+        GLib timer would stop it for good, leaving a frozen cat."""
+        try:
+            return self._tick(widget, clock)
+        except Exception:  # noqa: BLE001
+            log_error(type(self).__name__)
+            self.recover()
+            return True
+
+    def _tick(self, widget, clock):
         if was_closed(self):
             return False
         now = time.monotonic()
@@ -904,6 +929,10 @@ class TitleCat(Gtk.DrawingArea):
                 self.on_playtime()
                 return
         self.react_to("click")
+
+    def recover(self):
+        """After an error: start the current animation afresh."""
+        self.treat, self.anim = None, None
 
     def play(self, anim, seconds):
         """Show an animation for a few seconds, e.g. "drink" when you drink a glass of water."""
@@ -1196,6 +1225,12 @@ class CatOverlay(Gtk.DrawingArea):
         self.last = time.monotonic()
         GLib.timeout_add(1000 // FPS, self.tick, None, None)
 
+    def recover(self):
+        """After an error: back on the title (from there it explores the window again if needed)."""
+        self.mode, self.hop, self.play_until, self.enter = "title", None, 0.0, 0.0
+        self.anchor, self.rest = (None, 0.0), 0.0
+        self.title.away = False
+
     def place_canvas(self, overlay, widget, rect):
         if widget is not self:
             return False
@@ -1342,8 +1377,10 @@ class CatOverlay(Gtk.DrawingArea):
 
     def surface_below(self, x, y):
         """The surface something falling from (x, y) lands on: the highest one under it."""
-        under = [s for s in self.surfaces() if s[1] <= x <= s[2] and s[3] >= y - 2]
-        return min(under, key=lambda s: s[3])
+        found = self.surfaces()
+        x = max(0.0, min(float(self.area_width()), x))
+        y = min(y, found[-1][3])  # e.g. the pointer below the floor: start on the floor
+        return min((s for s in found if s[1] <= x <= s[2] and s[3] >= y - 2), key=lambda s: s[3])
 
     def anchor_on(self, surface, x):
         """Stand on a surface near x. The anchor follows the widget when the list scrolls."""
@@ -1429,6 +1466,16 @@ class CatOverlay(Gtk.DrawingArea):
 
     # --- animation ---
     def tick(self, widget, clock):
+        """One animation step. An error is logged and the cat carries on – an exception escaping a
+        GLib timer would stop it for good, leaving a frozen cat."""
+        try:
+            return self._tick(widget, clock)
+        except Exception:  # noqa: BLE001
+            log_error(type(self).__name__)
+            self.recover()
+            return True
+
+    def _tick(self, widget, clock):
         if was_closed(self):
             return False
         now = time.monotonic()
