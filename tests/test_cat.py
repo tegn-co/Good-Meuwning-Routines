@@ -81,6 +81,13 @@ class CatTest(unittest.TestCase):
         self.assertEqual(c.treat, "grumpy")
         self.assertTrue(c.speech or c.happy_until)
 
+    def test_cuddle_faces(self):
+        import cat_cuddle
+        for (eyes, knead), sprite in cat_cuddle.FACES.items():
+            self.assertEqual(len({len(r) for r in sprite}), 1, (eyes, knead))
+            self.assertLessEqual(set("".join(sprite)), set("bswpeo."), (eyes, knead))
+            self.assertEqual("e" in "".join(sprite), eyes in ("open", "half"), eyes)
+
     def test_maine_coon_is_bigger(self):
         g = cat.MAINE_COON_GROWTH
         for name, frames in cat.FILL.items():

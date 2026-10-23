@@ -206,7 +206,9 @@ class MainWindow(Adw.ApplicationWindow):
         # The "good morning" title, with the pixel cat living on top of the letters
         self.title_cat = TitleCat(palette, forced=cat)
         body.append(self.title_cat)
-        CatOverlay(self.title_cat, self.overlay)  # adds itself to the overlay
+        self.cat_overlay = CatOverlay(self.title_cat, self.overlay)  # adds itself to the overlay
+        if cat == "cuddle":  # --cat=cuddle: straight to a cuddle (for testing)
+            GLib.timeout_add_seconds(2, lambda: self.cat_overlay.start_cuddle() and False)
         self.pomodoro = PomodoroPanel(self.title_cat, palette, on_change=self.on_pomodoro_change)
         self.side_stack.add_named(self.pomodoro, "pomo")
         self.cat_panel = CatPanel(self.title_cat)
@@ -541,6 +543,9 @@ class MainWindow(Adw.ApplicationWindow):
         # React only when the list was just completed, not when it loads already complete
         if done == total and not getattr(self, "all_done", True) and not self.loading:
             self.title_cat.react_to("all_done", 3)
+            if not self.productive and db.load_config().get("cuddle_day") != date.today().isoformat():
+                db.update_config(cuddle_day=date.today().isoformat())  # a reward, once a day
+                GLib.timeout_add(1500, lambda: self.cat_overlay.start_cuddle() and False)
         self.all_done = done == total
         self.state["complete"] = total > 0 and done == total  # stored per day, used for streaks
         for key, (item, check, extra) in self.items.items():

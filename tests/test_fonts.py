@@ -19,7 +19,7 @@ from gi.repository import Pango, PangoCairo  # noqa: E402
 import platforms  # noqa: E402
 
 ROOT = Path(__file__).resolve().parent.parent
-UI_MODULES = ["app.py", "cat.py", "cat_panel.py", "pomodoro_panel.py", "tutorial.py", "translations.py", "weather.py", "hydration.py"]
+UI_MODULES = ["app.py", "cat.py", "cat_panel.py", "pomodoro_panel.py", "tutorial.py", "translations.py", "weather.py", "hydration.py", "cat_cuddle.py"]
 
 
 def ui_symbols():

@@ -278,6 +278,10 @@ NB = {
     "glass size (ml)": "glasstørrelse (ml)",
     "remind me after (min, 0 = off)": "minn meg på etter (min, 0 = av)",
     "also as a desktop notification": "også som skrivebordsvarsel",
+    # Cuddles (cat_cuddle.py)
+    "purr…": "purr…",
+    "mrrp ♥": "mrrp ♥",
+    "stroke me ♥ · click to let go": "kos med meg ♥ · klikk for å slippe",
     "ultimate productivity mode": "ultimat produktivitetsmodus",
     "Hides the cat, the water glasses, the weather and streaks. Nothing is deleted – turn it off to get them back.":
         "Skjuler katten, vannglassene, været og streaks. Ingenting slettes – slå av for å få dem tilbake.",

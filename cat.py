@@ -1190,7 +1190,8 @@ class CatOverlay(Gtk.DrawingArea):
     and if what it stands on scrolls away it falls onto whatever is below (the window's bottom edge is
     the floor). It never stands on thin air. During "climb" it walks around the inside of the window
     edge instead: bottom, up the right wall, upside down along the top, down the left wall. When the
-    title is visible again, it hops back.
+    title is visible again, it hops back. Pet it on the title and it comes up close for a cuddle
+    (cat_cuddle.py): the canvas then covers the window and takes the clicks.
     """
 
     SPEED = 40  # pixels per second along the frame
@@ -1211,18 +1212,23 @@ class CatOverlay(Gtk.DrawingArea):
         overlay.connect("get-child-position", self.place_canvas)
         self.canvas = (0, 0, 1, 1)  # x, y, width, height in the overlay
         self.hidden = False  # productivity mode has wiped the cat
+        self.cuddle = None  # a cat_cuddle.Cuddle while the cat is up close
+        self.petted, self.pet_from = 0.0, None  # stroking the cat on the title
+        click = Gtk.GestureClick()  # only while cuddling: the canvas then covers the window
+        click.connect("pressed", lambda *_a: self.cuddle and self.cuddle.leave())
+        self.add_controller(click)
         # "playtime" easter egg: the cat pounces after the mouse pointer
         self.pointer = None  # (x, y) in the overlay, None when the pointer is outside
         self.pointer_left = 0.0
         self.play_until = 0.0
         motion = Gtk.EventControllerMotion()
-        motion.connect("motion", lambda _, x, y: setattr(self, "pointer", (x, y)))
+        motion.connect("motion", lambda _m, x, y: self.on_motion(x, y))
         motion.connect("leave", self.on_pointer_leave)
         overlay.add_controller(motion)
         title.on_playtime = self.start_playtime
         self.title = title
         title.external = True
-        self.mode = "title"  # title | frame | roam | hop | playtime
+        self.mode = "title"  # title | frame | roam | hop | playtime | cuddle
         self.s, self.d = 0.0, 1  # position along the frame and direction
         self.anchor = (None, 0.0)  # what the cat stands on in roam and playtime: (widget, x from its left)
         self.rest = 0.0  # seconds left sitting down while exploring
@@ -1233,6 +1239,9 @@ class CatOverlay(Gtk.DrawingArea):
 
     def recover(self):
         """After an error: back on the title (from there it explores the window again if needed)."""
+        if self.cuddle:
+            self.cuddle = None
+            self.set_can_target(False)
         self.mode, self.hop, self.play_until, self.enter = "title", None, 0.0, 0.0
         self.anchor, self.rest = (None, 0.0), 0.0
         self.title.away = False
@@ -1249,6 +1258,42 @@ class CatOverlay(Gtk.DrawingArea):
 
     def area_height(self):
         return self.overlay.get_height()
+
+    # --- petting and cuddles ---
+    def on_motion(self, x, y):
+        last, self.pointer = self.pointer, (x, y)
+        if self.mode == "cuddle":
+            self.cuddle.pet(x, y)
+        elif self.mode == "title" and not self.title.cat_off and last:
+            # Stroking the cat on the title: enough of it and it comes up close for a cuddle
+            tx, ty, visible = self.pose_on_title()
+            if visible and abs(x - tx) <= 12 * PX and ty - self.HEAD_ROOM <= y <= ty + 2:
+                was = self.petted
+                self.petted += math.hypot(x - last[0], y - last[1])
+                if was < 150 <= self.petted:
+                    self.title.say(_("purr…"), 1.5)
+                if self.petted >= 400:
+                    self.start_cuddle()
+
+    def start_cuddle(self):
+        if self.title.cat_off or self.mode == "cuddle" or self.area_width() == 0:
+            return
+        import cat_cuddle
+        self.cuddle = cat_cuddle.Cuddle(self, self.paw_position())
+        self.mode, self.play_until, self.petted = "cuddle", 0.0, 0.0
+        self.title.away = True
+        self.set_can_target(True)  # clicks end the cuddle instead of reaching the list below
+        self.queue_allocate()
+
+    def cuddle_tick(self, now):
+        self.cuddle.tick(now)
+        if self.cuddle.done(now):
+            self.recover()  # back on the title, or exploring the window if the title is scrolled away
+        canvas = self.canvas_rect()
+        if canvas != self.canvas:
+            self.canvas = canvas
+            self.overlay.queue_allocate()
+        self.queue_draw()
 
     # --- playtime ---
     def on_pointer_leave(self, _):
@@ -1496,6 +1541,10 @@ class CatOverlay(Gtk.DrawingArea):
                 self.queue_draw()  # wipe the cat that was drawn last
             return True
         self.hidden = False
+        self.petted = max(0.0, self.petted - 120 * dt)  # petting has to keep going
+        if self.mode == "cuddle":
+            self.cuddle_tick(now)
+            return True
         tx, ty, visible = self.pose_on_title()
         if self.mode == "playtime":
             self.playtime_tick(dt, now, tx, ty, visible)
@@ -1581,7 +1630,9 @@ class CatOverlay(Gtk.DrawingArea):
         return True
 
     def canvas_rect(self):
-        """Where the canvas goes: a band across the window around the paws."""
+        """Where the canvas goes: a band across the window around the paws (all of it for a cuddle)."""
+        if self.mode == "cuddle":
+            return 0, 0, max(1, self.area_width()), max(1, self.area_height())
         _ax, ay = self.paw_position()
         return 0, round(ay - self.ABOVE), max(1, self.area_width()), self.ABOVE + self.BELOW
 
@@ -1596,6 +1647,8 @@ class CatOverlay(Gtk.DrawingArea):
         if self.mode in ("playtime", "roam"):
             x, y, _ok = self.anchor_pos(self.anchor)
             return x, y
+        if self.mode == "cuddle":
+            return self.area_width() / 2, self.area_height()
         e = min(self.hop["t"], 1)
         (x0, y0, _), (x1, y1, _) = self.hop["from"], self.hop["to"]
         return x0 + (x1 - x0) * e, y0 + (y1 - y0) * e - math.sin(math.pi * e) * self.hop_height(y0, y1)
@@ -1617,6 +1670,9 @@ class CatOverlay(Gtk.DrawingArea):
     def draw(self, area, cr, width, height):
         title = self.title
         if title.cat_off:
+            return
+        if self.mode == "cuddle":
+            self.cuddle.draw(cr, width, height)
             return
         if self.mode == "title":
             tx, ty, _ = self.pose_on_title()

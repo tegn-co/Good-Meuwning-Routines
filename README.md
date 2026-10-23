@@ -53,6 +53,7 @@ eats lunch, chases butterflies and laser dots, hides in boxes and cheers when yo
     Scroll the title away and the cat jumps down to keep you company – it walks on the text, lines and boxes,<br>
     hops between them and falls onto whatever is below if its spot scrolls away. It never stands on thin air.<br>
     It yawns in the morning and gets sleepy after 16:00.<br>
+    Stroke it with the pointer and it comes up close, fills the window, purrs and wants cuddles (it also does that once a day when the whole list is done).<br>
     Drag the window and it reacts – stressed, grumpy or having the time of its life (drag it too often and it gets grumpy).</sub></td>
   </tr>
 </table>
@@ -173,7 +174,7 @@ Run from source:
 python3 app.py                 # the app
 python3 app.py --cat=climb     # force an animation: walk, play, sleep, sit, jump, climb,
                                # butterfly, groom, stretch, eat, zoomies, tailchase, loaf,
-                               # box, knead, laser, wave, bird, roll, yarn
+                               # box, knead, laser, wave, bird, roll, yarn, cuddle
 python3 docs/make_art.py       # regenerate the pixel art in this README
 ```
 
@@ -206,6 +207,7 @@ packaging/windows/build.sh 1.7.0 && iscc /DAppVersion=1.7.0 packaging/windows/in
 |---|---|
 | `app.py` | the app and its main window: list, plan, hours, settings, backup, updates |
 | `cat.py` | the pixel cat, its animations, accessories and seasons |
+| `cat_cuddle.py` | the cat up close: purring and cuddles |
 | `cat_tricks.py` | ten extra animations (zoomies, box, laser, yarn …) |
 | `cat_panel.py` | cat side panel: breed, colors, accessories and what the cat says |
 | `pomodoro_panel.py` | pomodoro side panel |
