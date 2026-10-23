@@ -11,7 +11,7 @@ from pathlib import Path
 from tests import env
 import translations
 
-MODULES = ["app.py", "cat.py", "cat_panel.py", "pomodoro_panel.py", "tutorial.py", "hydration.py"]
+MODULES = ["app.py", "cat.py", "cat_panel.py", "pomodoro_panel.py", "tutorial.py", "hydration.py", "cat_cuddle.py"]
 
 
 class I18nTest(unittest.TestCase):

@@ -22,6 +22,7 @@ WAIT = object()  # returned by a step that should run again shortly
 
 class AppTest(unittest.TestCase):
     def test_new_user_flow(self):
+        db.update_config(cuddle_day=date.today().isoformat())  # no reward cuddle when the test finishes the list
         app = W.App()
         app.set_application_id("no.zivid.MorgenTodoTests")
         failures, steps = [], []
@@ -200,6 +201,8 @@ class AppTest(unittest.TestCase):
             self.data_before = json.dumps(w.state, sort_keys=True)
             w.on_productivity_mode(Check(True))
             check(db.load_config().get("productivity_mode") is True, "productivity mode not saved")
+            w.cat_overlay.start_cuddle()
+            check(w.cat_overlay.mode != "cuddle", "a cuddle in productivity mode")
             check(not w.cat_btn.get_visible() and not w.water_box.get_visible() and not w.weather_row.get_visible()
                   and not w.streak_lbl.get_visible() and w.title_cat.cat_off, "something playful is still shown")
 
@@ -226,6 +229,41 @@ class AppTest(unittest.TestCase):
             check(w.cat_btn.get_visible() and w.water_box.get_visible() and w.weather_row.get_visible()
                   and not w.title_cat.cat_off, "turning productivity mode off did not bring everything back")
             check(json.dumps(w.state, sort_keys=True) == before, "productivity mode changed the data")
+
+        @step
+        def cuddle_by_petting(w):
+            r = w.cat_overlay
+            r.recover()
+            tx, ty, visible = r.pose_on_title()
+            r.pointer = None
+            for i in range(30):  # stroke the cat on the title back and forth
+                r.on_motion(tx + (15 if i % 2 else -15), ty - 10)
+            check(r.mode == "cuddle" and r.get_can_target(), f"petting did not start a cuddle: {r.mode}")
+            check(r.canvas_rect() == (0, 0, r.area_width(), r.area_height()), "the cuddle canvas is not the whole window")
+
+        @step
+        def cuddle_up_close(w):
+            import time as _time
+            import cairo
+            r = w.cat_overlay
+            c = r.cuddle
+            c.t0 -= 2  # done coming close
+            fx, fy, fw, fh, _px = c.layout(_time.monotonic())
+            check(fw * fh >= 0.3 * r.area_width() * r.area_height(), f"the cat is not big: {fw:.0f}x{fh:.0f}")
+            c.last_pointer = None
+            for i in range(20):  # stroke its face
+                c.pet(fx + fw / 2 + (40 if i % 2 else -40), fy + fh / 2)
+            check(c.hearts and c.eyes(_time.monotonic()) == "happy", "petting did not make the cat happy")
+            c.tick(_time.monotonic())
+            surf = cairo.ImageSurface(cairo.FORMAT_ARGB32, r.area_width(), r.area_height())
+            r.draw(None, cairo.Context(surf), r.area_width(), r.area_height())
+            c.leave()  # what a click does
+            c.leaving -= 1
+
+        @step
+        def cuddle_over(w):
+            r = w.cat_overlay
+            check(r.mode != "cuddle" and r.cuddle is None and not r.get_can_target(), f"the cuddle did not end: {r.mode}")
 
         @step
         def cat_page(w):
