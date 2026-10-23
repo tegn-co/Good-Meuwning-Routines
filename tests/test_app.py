@@ -1,4 +1,5 @@
 """Runs the whole app (needs a display; in CI: xvfb-run) through a new user's flow."""
+import json
 import traceback
 import unittest
 from datetime import date, datetime, timedelta
@@ -152,6 +153,79 @@ class AppTest(unittest.TestCase):
             w.on_header_drag(None, 30, 10)
             check(w.title_cat.animation() in cat_tricks.MOVE_TRICKS, f"no reaction to moving: {w.title_cat.animation()}")
             w.title_cat.treat = None
+
+        @step
+        def nothing_cut_off(w):
+            # Every animation, prop and bubble fits in the cat's canvas, on the title and elsewhere
+            import cairo
+            import cat_tricks
+            r = next(c for c in [w.overlay.get_last_child()] if isinstance(c, cat.CatOverlay))
+            t, width, height = w.title_cat, r.area_width(), r.area_height()
+
+            def cut(label):
+                surf = cairo.ImageSurface(cairo.FORMAT_ARGB32, width, height)
+                r.draw(None, cairo.Context(surf), width, height)
+                surf.flush()
+                data, stride = bytes(surf.get_data()), surf.get_stride()
+                x, y, cw, ch = r.canvas_rect()
+                outside = data[:max(0, y) * stride].strip(b"\0") or data[max(0, y + ch) * stride:].strip(b"\0")
+                if outside:
+                    failures.append(f"{label} is drawn outside the cat's canvas")
+
+            extra = list(cat_tricks.WATER_TRICKS) + list(cat_tricks.MOVE_TRICKS)
+            for i, anim in enumerate(cat.ANIMATIONS + ["eat"] + extra):
+                t.forced, t.treat = (None, None) if anim in extra else (anim, None)
+                if anim in extra:
+                    t.play(anim, 10)
+                if i % 2:
+                    t.say("this is a rather long thing for a cat to say!", 10)
+                for frame in range(48):
+                    t.last -= 0.05
+                    t.tick(None, None)
+                    if frame % 8 == 7:
+                        cut(f"{anim} (frame {frame})")
+            t.forced, t.treat = None, None
+            t.say("and a long bubble out in the window as well", 10)
+            for r.mode, r.s, r.d, r.enter in [("frame", s * r.perimeter() / 8, 1, 0.0) for s in range(8)]:
+                cut(f"the cat on the frame at {r.s:.0f}")
+            r.mode, r.anchor, r.rest = "roam", (None, r.area_width() / 2), 0.0
+            cut("the cat on the floor")
+            r.recover()
+
+        @step
+        def productivity_mode(w):
+            class Check:
+                def __init__(self, on):
+                    self.get_active = lambda: on
+            self.data_before = json.dumps(w.state, sort_keys=True)
+            w.on_productivity_mode(Check(True))
+            check(db.load_config().get("productivity_mode") is True, "productivity mode not saved")
+            check(not w.cat_btn.get_visible() and not w.water_box.get_visible() and not w.weather_row.get_visible()
+                  and not w.streak_lbl.get_visible() and w.title_cat.cat_off, "something playful is still shown")
+
+        @step
+        def productivity_mode_shown(w):
+            # What is actually on screen: the cat's layer as GTK renders it now (not a fresh draw)
+            import io
+            import cairo
+            from gi.repository import Gtk
+
+            class Check:
+                def __init__(self, on):
+                    self.get_active = lambda: on
+            r = next(c for c in [w.overlay.get_last_child()] if isinstance(c, cat.CatOverlay))
+            snap = Gtk.Snapshot()
+            Gtk.WidgetPaintable.new(r).snapshot(snap, r.get_width(), r.get_height())
+            node = snap.to_node()
+            if node is not None:
+                png = w.get_native().get_renderer().render_texture(node, None).save_to_png_bytes().get_data()
+                surf = cairo.ImageSurface.create_from_png(io.BytesIO(png))
+                check(not bytes(surf.get_data()).strip(b"\0"), "the cat is still on screen in productivity mode")
+            before = self.data_before
+            w.on_productivity_mode(Check(False))
+            check(w.cat_btn.get_visible() and w.water_box.get_visible() and w.weather_row.get_visible()
+                  and not w.title_cat.cat_off, "turning productivity mode off did not bring everything back")
+            check(json.dumps(w.state, sort_keys=True) == before, "productivity mode changed the data")
 
         @step
         def cat_page(w):

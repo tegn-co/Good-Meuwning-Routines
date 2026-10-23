@@ -28,6 +28,7 @@ eats lunch, chases butterflies and laser dots, hides in boxes and cheers when yo
 | 🕗 **Your schedule** | Choose when the list opens, when you're reminded (and on which weekdays), when it saves & closes, and when the cat has lunch. On Windows and Flatpak the app starts quietly at login so it can open on time. |
 | 💾 **Backup** | Export everything to one .zip, restore it later, and export your hours as CSV for your timesheet. |
 | 🔄 **Updates** | The app tells you when a new version is out and updates itself with one click. |
+| 🎯 **Ultimate productivity mode** | One switch under ⚙ hides everything that isn't about getting work done – the cat, water, weather and streaks. Nothing is deleted; switch it off and it's all back. |
 | 🌗 **Light & dark** | Follows your system theme, or pick one. |
 | 🇳🇴 **English & Norwegian** | Follows your system language, or pick one under ⚙. |
 

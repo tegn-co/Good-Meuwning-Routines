@@ -175,6 +175,7 @@ class WaterBox(Gtk.Box):
         self.count, self.last = 0, None  # glasses today, time of the last one
         self.since = datetime.now()  # when to start counting for the reminder if nothing is drunk yet
         self.notified = False
+        self.off = False  # productivity mode hides the water row (the count is kept)
         row = Gtk.Box(spacing=10)
         row.append(_label("H2O", "num"))
         row.append(_label(_("Water today"), "title"))
@@ -202,8 +203,12 @@ class WaterBox(Gtk.Box):
 
     def apply_settings(self):
         self.cfg = settings()
-        self.set_visible(self.cfg["water_goal"] > 0)
+        self.set_visible(self.cfg["water_goal"] > 0 and not self.off)
         self.refresh()
+
+    def set_off(self, off):
+        self.off = off
+        self.apply_settings()
 
     def thirsty_now(self, now=None):
         now = now or datetime.now()

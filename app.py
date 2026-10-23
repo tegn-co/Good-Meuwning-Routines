@@ -351,6 +351,7 @@ class MainWindow(Adw.ApplicationWindow):
         GLib.timeout_add_seconds(30 * 60, self.refresh_weather)
         # Poll the wall clock every 30 s (a plain long timer stops while the machine sleeps)
         GLib.timeout_add_seconds(30, self.on_clock_tick)
+        self.apply_productivity_mode()
 
     def apply_schedule(self, sch):
         """Apply the ⚙ → schedule times to the window (close time and the cat's lunch)."""
@@ -373,7 +374,7 @@ class MainWindow(Adw.ApplicationWindow):
             return
         n = info["streak"]
         self.streak_lbl.set_label(_("{n} days in a row").format(n=n) if n >= 2 else "")
-        self.streak_lbl.set_visible(n >= 2)
+        self.streak_lbl.set_visible(n >= 2 and not self.productive)
         (self.streak_lbl.add_css_class if self.state.get("complete") else self.streak_lbl.remove_css_class)("plus")
         unlocked = {k for k, days, _ in catmod.UNLOCKS if info["best"] >= days}
         new = unlocked - catmod.UNLOCKED
@@ -390,7 +391,7 @@ class MainWindow(Adw.ApplicationWindow):
 
     def react_to_progress(self):
         """The cat reacts to how the day is going (checked every 30 s)."""
-        if not self.loaded or self.pomodoro.running() or random.random() > 0.12:
+        if self.productive or not self.loaded or self.pomodoro.running() or random.random() > 0.12:
             return
         now = datetime.now()
         keys = self.item_order()
@@ -579,7 +580,28 @@ class MainWindow(Adw.ApplicationWindow):
             adj.set_value(point.y - 20)
         return False
 
+    def on_productivity_mode(self, check):
+        self.productive = check.get_active()
+        db.update_config(productivity_mode=self.productive)
+        self.apply_productivity_mode()
+
+    def apply_productivity_mode(self):
+        """Show or hide everything that isn't about productivity. Only the view changes; the data stays."""
+        on = self.productive
+        self.title_cat.cat_off = on
+        if on and self.cat_btn.get_active():
+            self.settings_btn.set_active(True)  # leave the cat page
+        self.cat_btn.set_visible(not on)
+        self.water_box.set_off(on)
+        self.weather_row.set_visible(bool(getattr(self, "weather", None)) and not on)
+        if on:
+            self.streak_lbl.set_visible(False)
+        elif self.loaded:
+            self.refresh_streak()
+
     def on_header_drag(self, _gesture, dx, dy):
+        if self.productive:
+            return
         if not getattr(self, "move_noticed", False) and dx * dx + dy * dy > 36:  # 6 px: not just a click on a button
             self.move_noticed = True
             cat_tricks.window_moved(self.title_cat)
@@ -710,6 +732,13 @@ class MainWindow(Adw.ApplicationWindow):
         tutorial.connect("clicked", lambda _: self.show_tutorial())
         head.append(tutorial)
         page.append(head)
+        # Ultimate productivity mode: everything that isn't about getting work done is hidden (not deleted)
+        self.productive = bool(db.load_config().get("productivity_mode"))
+        mode = Gtk.CheckButton(label=_("ultimate productivity mode"), active=self.productive, margin_top=8)
+        mode.connect("toggled", self.on_productivity_mode)
+        page.append(mode)
+        page.append(label("Hides the cat, the water glasses, the weather and streaks. Nothing is deleted – "
+                          "turn it off to get them back.", "detail", "muted", wrap=True))
         heading = label("todos", "num")
         heading.set_margin_top(10)
         page.append(heading)
@@ -875,7 +904,7 @@ class MainWindow(Adw.ApplicationWindow):
 
     def show_weather(self, w):
         self.weather = w if db.load_config().get("weather_place") else None
-        self.weather_row.set_visible(bool(self.weather))
+        self.weather_row.set_visible(bool(self.weather) and not self.productive)
         if not self.weather:
             return
         text = f"{w['temp']}° · {w['min']}–{w['max']}°"

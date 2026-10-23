@@ -643,6 +643,7 @@ class TitleCat(Gtk.DrawingArea):
         self.mode = None  # set by the pomodoro panel while the timer runs
         self.treat, self.treat_until = None, 0.0  # a short animation on demand, see play()
         self.thirsty = False  # set by the water glasses when it's time for a glass
+        self.cat_off = False  # productivity mode: just the title, no cat
         self.x, self.dir = 0.0, 1
         self.t = 0.0
         self.last = time.monotonic()
@@ -916,6 +917,8 @@ class TitleCat(Gtk.DrawingArea):
         return random.choice(spots) if spots else self.x
 
     def on_click(self, gesture, n_press, x, y):
+        if self.cat_off:
+            return
         # A wave through the letters and a small heart above the cat
         for i in range(len(self.vy)):
             self.vy[i] -= 70 + 50 * math.sin(i / 1.5)
@@ -1017,7 +1020,7 @@ class TitleCat(Gtk.DrawingArea):
         anim = self.anim
         if anim is None:
             return
-        if self.away or (anim == "climb" and self.external):
+        if self.away or self.cat_off or (anim == "climb" and self.external):
             anim = None  # no cat on the title: the cursor blinks as usual
         elif anim == "climb":
             anim = "walk"
@@ -1175,9 +1178,11 @@ class TitleCat(Gtk.DrawingArea):
 class CatOverlay(Gtk.DrawingArea):
     """Transparent layer over the whole window that draws the cat.
 
-    The canvas is only a small square (BOX) that the overlay positions where the cat is
-    (get-child-position), so GTK redraws just that square instead of the whole window. The frame the
-    cat walks around is the overlay's size, i.e. the visible content; the square can never enlarge it.
+    The canvas is only a band across the window around the cat's paws (ABOVE + BELOW high) that the
+    overlay positions where the cat is (get-child-position), so GTK redraws just that band instead of
+    the whole window. It is as wide as the window, so props far from the cat (yarn, laser dot, bird),
+    long speech bubbles and a cat on a wall all fit. The frame the cat walks around is the overlay's
+    size, i.e. the visible content; the band can never enlarge it.
 
     On the title the cat is drawn where the title is (TitleCat drives the animation). If the title is
     scrolled out of view, the cat jumps down into the window and explores it: it walks on things – the
@@ -1191,7 +1196,7 @@ class CatOverlay(Gtk.DrawingArea):
     SPEED = 40  # pixels per second along the frame
     EDGE = 1  # distance from the edge to the paws
     HALF = 11 * PX  # half the cat's length: it turns at a corner when its nose reaches the wall, so nothing sticks out
-    BOX = 160  # canvas size around the cat (room for bubble, bowl and z's)
+    ABOVE, BELOW = 150, 60  # canvas above and below the paws: hops, bubbles, flying birds; a cat upside down
     # Things to stand on: widgets of these types (their top, or a label's text) and boxes with a line on top
     SURFACE_TYPES = (Gtk.Label, Gtk.Entry, Gtk.SpinButton, Gtk.DropDown)
     SURFACE_CLASSES = ("item", "hours", "water", "planbox", "setrow")
@@ -1204,7 +1209,8 @@ class CatOverlay(Gtk.DrawingArea):
         self.set_draw_func(self.draw_canvas)
         overlay.add_overlay(self)
         overlay.connect("get-child-position", self.place_canvas)
-        self.origin = (0, 0)
+        self.canvas = (0, 0, 1, 1)  # x, y, width, height in the overlay
+        self.hidden = False  # productivity mode has wiped the cat
         # "playtime" easter egg: the cat pounces after the mouse pointer
         self.pointer = None  # (x, y) in the overlay, None when the pointer is outside
         self.pointer_left = 0.0
@@ -1234,8 +1240,7 @@ class CatOverlay(Gtk.DrawingArea):
     def place_canvas(self, overlay, widget, rect):
         if widget is not self:
             return False
-        rect.x, rect.y = self.origin
-        rect.width = rect.height = self.BOX
+        rect.x, rect.y, rect.width, rect.height = self.canvas
         return True
 
     # The frame is the overlay (the visible content), not this small canvas
@@ -1251,6 +1256,8 @@ class CatOverlay(Gtk.DrawingArea):
         self.pointer_left = time.monotonic()
 
     def start_playtime(self):
+        if self.title.cat_off:
+            return
         now = time.monotonic()
         self.play_until = now + PLAYTIME_SECONDS
         self.play_wait, self.play_catches = 0.0, 0
@@ -1482,6 +1489,13 @@ class CatOverlay(Gtk.DrawingArea):
         dt, self.last = min(now - self.last, 0.05), now
         if self.area_width() == 0:
             return True
+        if self.title.cat_off:  # productivity mode: no cat anywhere
+            if not self.hidden:
+                self.hidden = True
+                self.recover()
+                self.queue_draw()  # wipe the cat that was drawn last
+            return True
+        self.hidden = False
         tx, ty, visible = self.pose_on_title()
         if self.mode == "playtime":
             self.playtime_tick(dt, now, tx, ty, visible)
@@ -1559,14 +1573,17 @@ class CatOverlay(Gtk.DrawingArea):
         calm = self.mode == "title" and self.title.is_calm()
         if now - getattr(self, "drawn_at", 0) >= 1 / (CALM_FPS if calm else FPS) - 0.005:
             self.drawn_at = now
-            # Move the small canvas to the cat (paws a bit below center, leaving room for the bubble above)
-            ax, ay = self.paw_position()
-            origin = (round(ax - self.BOX / 2), round(ay - self.BOX * 0.62))
-            if origin != self.origin:
-                self.origin = origin
+            canvas = self.canvas_rect()  # move the band along with the cat
+            if canvas != self.canvas:
+                self.canvas = canvas
                 self.overlay.queue_allocate()  # moves the square (see place_canvas)
             self.queue_draw()
         return True
+
+    def canvas_rect(self):
+        """Where the canvas goes: a band across the window around the paws."""
+        _ax, ay = self.paw_position()
+        return 0, round(ay - self.ABOVE), max(1, self.area_width()), self.ABOVE + self.BELOW
 
     def paw_position(self):
         """The cat's paws in overlay coordinates, in any mode."""
@@ -1584,7 +1601,7 @@ class CatOverlay(Gtk.DrawingArea):
         return x0 + (x1 - x0) * e, y0 + (y1 - y0) * e - math.sin(math.pi * e) * self.hop_height(y0, y1)
 
     def draw_canvas(self, area, cr, width, height):
-        cr.translate(-self.origin[0], -self.origin[1])
+        cr.translate(-self.canvas[0], -self.canvas[1])
         self.draw(area, cr, self.area_width(), self.area_height())
 
     def hop_height(self, y0, y1):
@@ -1599,6 +1616,8 @@ class CatOverlay(Gtk.DrawingArea):
     # --- drawing ---
     def draw(self, area, cr, width, height):
         title = self.title
+        if title.cat_off:
+            return
         if self.mode == "title":
             tx, ty, _ = self.pose_on_title()
             ok, p = title.compute_point(self.overlay, Graphene.Point())
