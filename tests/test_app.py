@@ -84,7 +84,15 @@ class AppTest(unittest.TestCase):
             w.hours.set_value(9)
             w.save_now()
 
-
+        @step
+        def otto_in_plan(w):
+            w.plan.get_buffer().set_text("- write report\n- call Ola\nnote\n- lunch with otto")
+            check(w.title_cat.treat == "otter" and w.title_cat.t < w.title_cat.treat_until, "writing otto did not make an otter")
+            w.title_cat.treat = None
+            buf = w.plan.get_buffer()
+            buf.insert(buf.get_end_iter(), " at noon")
+            check(w.title_cat.treat is None, "editing the plan with the same otto made another otter")
+            w.plan.get_buffer().set_text("- write report\n- call Ola\nnote")
 
         @step
         def background_color(w):

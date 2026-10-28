@@ -38,7 +38,21 @@ class CatTest(unittest.TestCase):
             cat.UNLOCKED, cat.SEASON_OVERRIDE = set(), None
             cat._DRESSED.clear()
 
-
+    def test_otter_dances_then_turns_back_into_the_cat(self):
+        import cat_tricks
+        c = cat.TitleCat(lambda: PAL)
+        surf = cairo.ImageSurface(cairo.FORMAT_ARGB32, 320, 86)
+        cr = cairo.Context(surf)
+        c.draw(None, cr, 320, 86)
+        cat_tricks.otter(c)
+        seen = set()
+        for _ in range(int(cat_tricks.OTTER_SECONDS / 0.05) + 20):
+            c.last -= 0.05
+            c.tick(None, None)
+            c.draw(None, cr, 320, 86)
+            seen.add((c.anim, cat.TRICKS["otter"].is_otter(c) if c.anim == "otter" else False))
+        self.assertIn(("otter", True), seen)
+        self.assertNotEqual(c.anim, "otter")
 
     def test_every_animation_ticks_and_draws(self):
         for anim in cat.ANIMATIONS + ["eat"]:
