@@ -79,8 +79,8 @@ And ten more tricks:
 
 That makes 19 animations, and the cat picks a new one every 15 minutes. Check something off and it says **good job!**
 
-<p align="center"><img src="docs/accessories.png" alt="bow tie, coffee cup, beanie, Santa hat, ghost" width="560"><br>
-<sub>bow tie (3 days in a row) · coffee cup (5) · beanie (10) · Santa hat in December · boo in Halloween week</sub></p>
+<p align="center"><img src="docs/accessories.png" alt="bow tie, coffee cup, beanie, Santa hat, pumpkin hat" width="560"><br>
+<sub>bow tie (3 days in a row) · coffee cup (5) · beanie (10) · Santa hat in December · pumpkin hat in Halloween week</sub></p>
 
 <p align="center"><img src="docs/breeds.png" alt="orange tabby, grey tabby, black, tuxedo, calico, white, siamese, maine coon" width="720"><br>
 <sub>orange tabby · grey tabby · black · tuxedo · calico · white · siamese · maine coon</sub></p>

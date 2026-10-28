@@ -507,10 +507,13 @@ SEASON_OVERRIDE = None  # "december" / "halloween" / "none" - for testing
 ACCESSORIES = {
     "beanie": ["..hhhhh..", ".hhhhhhh.", "HHHHHHHHH"],  # knitted beanie with brim
     "santa": [".......WW", ".....rr..", "...rrrrr.", "..rrrrrrr", "WWWWWWWWW"],  # Santa hat with pompom
+    "pumpkin": ["....gg...", ".jjjJjjj.", "jjojJjojj", "jjjooojjj", ".jjjJjjj."],  # jack-o'-lantern hat
     "bowtie": ["q...q", "qqqqq", "q...q"],
 }
 CUP = ["CCCC.", "CddCC", "CddC.", "CCCC."]
-COLORS.update(h="#4a7bd0", H="#e9e6de", r="#d63a3a", W="#ffffff", q="#c93a4a", C="#f2efe9", d="#6b3e1e")
+COLORS.update(h="#4a7bd0", H="#e9e6de", r="#d63a3a", W="#ffffff", q="#c93a4a", C="#f2efe9", d="#6b3e1e",
+              j="#f08a24", J="#c4621a", g="#4f7a2e")
+SEASON_HATS = {"december": "santa", "halloween": "pumpkin"}
 _DRESSED = {}
 
 
@@ -529,22 +532,16 @@ def worn_accessories():
     """Accessories the cat is wearing right now."""
     wear = SETTINGS.get("wear", {})
     on = [k for k, _, _ in UNLOCKS if k in UNLOCKED and wear.get(k, True)]
-    if current_season() == "december":
-        on = [k for k in on if k != "beanie"] + ["santa"]  # the Santa hat replaces the beanie
+    season_hat = SEASON_HATS.get(current_season())
+    if season_hat:
+        on = [k for k in on if k != "beanie"] + [season_hat]  # the season's hat replaces the beanie
     return tuple(on)
-
-
-def current_colors():
-    """Normal colors, or ghost colors during Halloween week."""
-    if current_season() != "halloween":
-        return COLORS
-    return dict(COLORS, b="#f4f4f6", s="#d9dbe2", w="#ffffff", o="#9a9cab", p="#c7c9d6", e="#2b2b33")
 
 
 def add_accessories(sprite):
     """Stamp accessories (hat, bow tie) into the sprite itself, so they follow when the cat flips and rotates."""
     on = worn_accessories()
-    hats = [a for a in on if a in ("beanie", "santa")]
+    hats = [a for a in on if a == "beanie" or a in SEASON_HATS.values()]
     if not hats and "bowtie" not in on:
         return sprite
     key = (tuple(sprite), on)
@@ -953,7 +950,7 @@ class TitleCat(Gtk.DrawingArea):
 
     # --- drawing ---
     def draw_sprite(self, cr, sprite, x, y, flip=False, colors=None, alpha=1.0):
-        colors = colors or current_colors()
+        colors = colors or COLORS
         used = {ch: colors[ch] for ch in set("".join(sprite)) if ch != "."}
         key = (tuple(sprite), flip, tuple(sorted(used.items())))
         surf = _SURFACES.get(key)

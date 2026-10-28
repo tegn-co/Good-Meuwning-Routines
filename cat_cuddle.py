@@ -199,7 +199,7 @@ class Cuddle:
             x += (1 if int(now * 28) % 2 else 0)  # purring: a tiny shiver
         knead = 1 + int(now / 0.45) % 2 if k >= 1 else 0
         sprite = FACES[(self.eyes(now) if k >= 1 else "open", knead)]
-        colors = cat.current_colors()
+        colors = cat.COLORS
         cr.save()
         cr.set_antialias(cairo.ANTIALIAS_NONE)
         for row, line in enumerate(sprite):

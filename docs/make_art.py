@@ -103,7 +103,7 @@ def butterfly():
 
 
 def accessories():
-    """Bow tie, coffee cup, beanie, Santa hat and ghost."""
+    """Bow tie, coffee cup, beanie, Santa hat and pumpkin hat."""
     looks = [({"bowtie"}, "none", False), ({"coffee"}, "none", True), ({"beanie"}, "none", False),
              (set(), "december", False), (set(), "halloween", False)]
     surf, cr = canvas(130 * len(looks), 140, bg=False)
@@ -112,12 +112,11 @@ def accessories():
         cat._DRESSED.clear()
         rows, base = sprite("sit", 0)
         rows = cat.add_accessories(rows)
-        colors = dict(cat.current_colors(), **({} if season == "halloween" else cat.BREEDS["orange tabby"]))
         x, y = i * 130 + 20, 132 - cat.sprite_size(rows)[1] * P
-        draw_sprite(cr, rows, colors, x, y)
+        draw_sprite(cr, rows, base, x, y)
         if cup:
             cup_rows = cat.add_outline(cat.CUP)
-            draw_sprite(cr, cup_rows, colors, x + cat.sprite_size(rows)[0] * P + 4, 132 - cat.sprite_size(cup_rows)[1] * P, px=3)
+            draw_sprite(cr, cup_rows, base, x + cat.sprite_size(rows)[0] * P + 4, 132 - cat.sprite_size(cup_rows)[1] * P, px=3)
     cat.UNLOCKED, cat.SEASON_OVERRIDE = set(), None
     surf.write_to_png(str(HERE / "accessories.png"))
 
