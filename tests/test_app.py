@@ -84,6 +84,19 @@ class AppTest(unittest.TestCase):
             w.hours.set_value(9)
             w.save_now()
 
+
+
+        @step
+        def background_color(w):
+            app.set_background("#16324f")
+            check(W.palette()["bg"] == "#16324f" and W.palette()["fg"] == W.PALETTES["dark"]["fg"], f"background not used: {W.palette()}")
+            check("chosen" in w.swatches["#16324f"].get_css_classes(), "chosen background not marked")
+            check(db.load_config()["background"] == "#16324f", "background not saved")
+            app.set_background("#efe4cf")
+            check(W.palette()["fg"] == W.PALETTES["light"]["fg"], "dark text expected on a light background")
+            app.cycle_theme()
+            check(W.BACKGROUND is None and "chosen" in w.swatches[None].get_css_classes(), "theme button did not go back to theme colors")
+
         @step
         def saved(w):
             d = db.load_day(date.today())

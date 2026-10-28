@@ -292,4 +292,15 @@ NB = {
     "whoa!|careful!|aaah!": "oi!|forsiktig!|aaah!",
     "hey!|hsss!|grr!": "hei!|hsss!|grr!",
     "wheee!|again!|weee!": "wiii!|igjen!|weee!",
+    # Background colors (⚙ → background)
+    "background": "bakgrunn",
+    "Background": "Bakgrunn",
+    "theme colors": "temafarger",
+    "forest": "skog",
+    "ocean": "hav",
+    "plum": "plomme",
+    "sand": "sand",
+    "mint": "mint",
+    "rose": "rosa",
+    "your own color": "din egen farge",
 }

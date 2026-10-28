@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Small, movable morning-todo window (GTK4). Stores data in SQLite via database.py (see there for the DB location)."""
+import functools
 import json
 import os
 import random
@@ -79,6 +80,8 @@ entry { border: none; border-bottom: 1px solid @mt_line; min-height: 26px; }
 .planbox { border: 1px solid @mt_line; padding: 6px; }
 button.flat { font-family: "Silkscreen"; font-size: 10px; color: @mt_muted; padding: 2px 4px; min-height: 0; }
 button.flat:hover { color: @mt_accent; background: transparent; }
+button.swatch { padding: 2px; min-width: 0; min-height: 0; border: 1px solid @mt_line; border-radius: 0; background: transparent; box-shadow: none; }
+button.swatch.chosen { border: 2px solid @mt_accent; padding: 1px; }
 """
 
 # Light and dark palettes (used as @mt_* in the CSS above)
@@ -86,12 +89,35 @@ PALETTES = {
     "light": {"bg": "#f4f4f0", "fg": "#111111", "muted": "#8a8a85", "line": "#dcdcd6", "accent": "#ff4f1f"},
     "dark": {"bg": "#0e0e0e", "fg": "#ededea", "muted": "#6b6b66", "line": "#262624", "accent": "#ff6a3d"},
 }
+# Background colors to choose from under ⚙ (None: the light/dark theme). Text colors follow the background's brightness.
+BACKGROUNDS = [("theme colors", None), ("forest", "#1f3b2d"), ("ocean", "#16324f"), ("plum", "#3b2240"),
+               ("sand", "#efe4cf"), ("mint", "#dff1e6"), ("rose", "#f6dfe3")]
+BACKGROUND = db.CONFIG.get("background")
 THEME_FILE = db.CONFIG_DIR / "theme"
 THEMES = [("system", "◐", Adw.ColorScheme.DEFAULT), ("light", "☀", Adw.ColorScheme.FORCE_LIGHT), ("dark", "☾", Adw.ColorScheme.FORCE_DARK)]
 
 
 def palette():
+    if BACKGROUND:
+        return palette_on(BACKGROUND)
     return PALETTES["dark" if Adw.StyleManager.get_default().get_dark() else "light"]
+
+
+def is_dark(hexc):
+    r, g, b = catmod.hex_to_rgb(hexc)
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b < 0.5
+
+
+def mix(a, b, share):
+    """The color share of the way from a to b."""
+    return "#" + "".join(f"{round((x + (y - x) * share) * 255):02x}" for x, y in zip(catmod.hex_to_rgb(a), catmod.hex_to_rgb(b)))
+
+
+@functools.cache
+def palette_on(background):
+    """Text, muted and line colors that read well on a chosen background."""
+    base = PALETTES["dark" if is_dark(background) else "light"]
+    return dict(base, bg=background, muted=mix(background, base["fg"], 0.45), line=mix(background, base["fg"], 0.15))
 
 
 def set_strikethrough(lbl, text, on):
@@ -744,6 +770,7 @@ class MainWindow(Adw.ApplicationWindow):
         page.append(mode)
         page.append(label("Hides the cat, the water glasses, the weather and streaks. Nothing is deleted – "
                           "turn it off to get them back.", "detail", "muted", wrap=True))
+        page.append(self.build_background_choice())
         heading = label("todos", "num")
         heading.set_margin_top(10)
         page.append(heading)
@@ -819,6 +846,61 @@ class MainWindow(Adw.ApplicationWindow):
         self.check_updates.connect("toggled", lambda b: db.update_config(check_updates=b.get_active()))
         page.append(self.check_updates)
         return page
+
+    def build_background_choice(self):
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
+        heading = label("background", "num")
+        heading.set_margin_top(10)
+        box.append(heading)
+        row = Gtk.Box(spacing=6)
+        self.swatches = {}
+        for name, color in BACKGROUNDS:
+            square = Gtk.DrawingArea(content_width=20, content_height=20)
+            square.set_draw_func(self.draw_swatch, color)
+            btn = Gtk.Button(child=square, tooltip_text=_(name))
+            btn.add_css_class("swatch")
+            btn.connect("clicked", lambda _b, c: self.get_application().set_background(c), color)
+            row.append(btn)
+            self.swatches[color] = btn
+        self.own_background = Gtk.ColorDialogButton(dialog=Gtk.ColorDialog(with_alpha=False, title=_("Background")),
+                                                    tooltip_text=_("your own color"), hexpand=True, halign=Gtk.Align.END)
+        rgba = Gdk.RGBA()
+        rgba.parse(BACKGROUND or palette()["bg"])
+        self.own_background.set_rgba(rgba)
+        self.own_background.connect("notify::rgba", self.on_own_background)
+        row.append(self.own_background)
+        box.append(row)
+        self.show_background_choice()
+        return box
+
+    @staticmethod
+    def draw_swatch(_area, cr, width, height, color):
+        if color:
+            cr.set_source_rgb(*catmod.hex_to_rgb(color))
+            cr.rectangle(0, 0, width, height)
+            cr.fill()
+            return
+        for (x0, y0), name in (((0, 0), "light"), ((width, height), "dark")):  # theme: half light, half dark
+            cr.set_source_rgb(*catmod.hex_to_rgb(PALETTES[name]["bg"]))
+            cr.move_to(x0, y0)
+            cr.line_to(width, 0)
+            cr.line_to(0, height)
+            cr.close_path()
+            cr.fill()
+
+    def on_own_background(self, button, _pspec):
+        rgba = button.get_rgba()
+        color = "#{:02x}{:02x}{:02x}".format(*(round(c * 255) for c in (rgba.red, rgba.green, rgba.blue)))
+        if color != BACKGROUND:
+            self.get_application().set_background(color)
+
+    def show_background_choice(self):
+        for color, btn in self.swatches.items():
+            (btn.add_css_class if color == BACKGROUND else btn.remove_css_class)("chosen")
+        if BACKGROUND not in self.swatches:
+            self.own_background.add_css_class("chosen")
+        else:
+            self.own_background.remove_css_class("chosen")
 
     # --- backup ---
     def choose_file(self, title, save_name, on_chosen, pattern=None):
@@ -1544,13 +1626,26 @@ class App(Adw.Application):
         name = name if name in [t[0] for t in THEMES] else "system"
         self.theme = name
         _name, icon, scheme = next(t for t in THEMES if t[0] == name)
+        if BACKGROUND:  # dialogs and popovers match the chosen background
+            scheme = Adw.ColorScheme.FORCE_DARK if is_dark(BACKGROUND) else Adw.ColorScheme.FORCE_LIGHT
         Adw.StyleManager.get_default().set_color_scheme(scheme)
         if win := getattr(self, "window", None):
             win.theme_btn.set_label(icon)
             win.theme_btn.set_tooltip_text(_("Theme: {name}").format(name=_(name)))
         self.apply_colors()
 
+    def set_background(self, color):
+        global BACKGROUND
+        BACKGROUND = color
+        db.update_config(background=color)
+        self.set_theme(self.theme)
+        if win := getattr(self, "window", None):
+            win.show_background_choice()
+
     def cycle_theme(self):
+        if BACKGROUND:  # the theme button first goes back to the theme's own colors
+            self.set_background(None)
+            return
         names = [t[0] for t in THEMES]
         self.set_theme(names[(names.index(self.theme) + 1) % len(names)])
         try:
@@ -1563,6 +1658,7 @@ class App(Adw.Application):
         self.colors.load_from_string("".join(f"@define-color mt_{k} {v};\n" for k, v in palette().items()))
         if win := getattr(self, "window", None):
             win.update_progress()
+            win.title_cat.queue_draw()
 
 
 if __name__ == "__main__":
