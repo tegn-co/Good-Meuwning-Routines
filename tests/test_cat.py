@@ -26,6 +26,20 @@ class CatTest(unittest.TestCase):
                     self.assertTrue(set("".join(f)) <= set(cat.COLORS) | {"."}, f"{shape}/{name} unknown color")
         cat.set_shape("normal")
 
+    def test_halloween_keeps_own_colors_and_wears_pumpkin_hat(self):
+        cat.UNLOCKED, cat.SEASON_OVERRIDE = {"beanie"}, "halloween"
+        cat._DRESSED.clear()
+        try:
+            self.assertEqual(cat.worn_accessories(), ("pumpkin",))
+            dressed = cat.add_accessories(cat.SPRITES["sit"][0])
+            self.assertIn("j", "".join(dressed))
+            self.assertTrue(set("".join(dressed)) <= set(cat.COLORS) | {"."})
+        finally:
+            cat.UNLOCKED, cat.SEASON_OVERRIDE = set(), None
+            cat._DRESSED.clear()
+
+
+
     def test_every_animation_ticks_and_draws(self):
         for anim in cat.ANIMATIONS + ["eat"]:
             for mode in (None, "eat"):  # "eat" = long pomodoro break, also outside lunch
