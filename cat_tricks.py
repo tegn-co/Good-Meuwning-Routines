@@ -491,3 +491,95 @@ def window_moved(c):
     mood = "grumpy" if len(c.moved_at) >= 3 else random.choice(list(MOVE_TRICKS))
     c.play(mood, 3.5)
     c.react_to(MOVE_EVENTS[mood], 2.5)
+
+
+# --- Otto: write "otto" in the plan and the cat turns into a dancing otter for a while ---
+OTTER = ["....uuuuuu....",
+         "...uuuuuuuu...",
+         "..uiyiuuiyiu..",
+         "..uiiiiiiiiu..",
+         "..iiiiyyiiii..",
+         "...iiiiiiii...",
+         "....uiiiiu....",
+         "...uuiiiiuu...",
+         "...uiiiiiiu...",
+         "...uiiiiiiu...",
+         "...uiiiiiiu...",
+         "...uiiiiiiuu..",
+         "....uiiiiu.uu.",
+         "....uu..uu..uu",
+         "...UUU..UUU..U"]
+OTTER_ARMS = [{(7, 2): "u", (6, 1): "u", (5, 1): "u", (4, 1): "u", (3, 1): "U",  # left paw up, right paw down
+               (8, 11): "u", (9, 11): "u", (10, 11): "U"},
+              {(7, 11): "u", (6, 12): "u", (5, 12): "u", (4, 12): "u", (3, 12): "U",  # right paw up, left paw down
+               (8, 2): "u", (9, 2): "u", (10, 2): "U"}]
+NOTE = ["..ee", "..e.", "..e.", "eee.", "ee.."]
+cat.COLORS.update(u="#6e4527", U="#432817", i="#e3c49a", y="#1b1410")
+POOF = 0.6  # seconds for the puff of smoke at each end
+OTTER_SECONDS = 10 + 2 * POOF
+
+
+def _otter(arms):
+    rows = [list(r) for r in OTTER]
+    for (r, c), ch in arms.items():
+        rows[r][c] = ch
+    return cat.add_outline(["".join(r) for r in rows])
+
+
+OTTER_SPRITES = [_otter(a) for a in OTTER_ARMS]
+
+
+class Otter(Trick):
+    """Poof! An otter dances for 10 s with music notes around it, then poof! the cat is back."""
+    moving = True
+    accessories = False  # the hat and bow tie belong to the cat
+
+    def start(self, c, lo, hi):
+        super().start(c, lo, hi)
+        c.otter_from, c.otter_x = c.t, c.x
+
+    def tick(self, c, dt, lo, hi):
+        dancing = POOF < c.t - c.otter_from < OTTER_SECONDS - POOF
+        c.x = max(lo, min(hi - CW, c.otter_x + (math.sin(c.t * 3) * 10 if dancing else 0)))
+        if dancing and int(c.t * 4) != int((c.t - dt) * 4):
+            c.bounce_letter(c.x + 7 * PX, 40)
+
+    def is_otter(self, c):
+        return POOF / 2 < c.t - c.otter_from < OTTER_SECONDS - POOF / 2
+
+    def draw(self, c, cr, top, pal):
+        if not self.is_otter(c):
+            return cat.SPRITES["sit"][0], 0
+        c.dir = 1 if int(c.t * 2) % 2 else -1  # turns with the beat
+        return OTTER_SPRITES[int(c.t * 4) % 2], -abs(math.sin(c.t * 2 * math.pi)) * 6
+
+    def draw_front(self, c, cr, top, pal, cat_y):
+        age = c.t - c.otter_from
+        if self.is_otter(c):
+            for i in range(2):
+                phase = (c.t / 1.6 + i / 2) % 1
+                nx = c.x + (-6 if i else 15 * PX) + math.sin(phase * 5 + i) * 4
+                c.draw_sprite(cr, NOTE, nx, cat_y - phase * 18, colors={"e": pal["accent"]}, alpha=1 - phase)
+        for start in (0.0, OTTER_SECONDS - POOF):
+            if start <= age < start + POOF:
+                self.draw_poof(c, cr, cat_y, (age - start) / POOF, pal)
+
+    def draw_poof(self, c, cr, cat_y, k, pal):
+        """A puff of smoke that swells and fades, hiding the change from cat to otter and back."""
+        cx, cy = c.x + 7 * PX, cat_y + 8 * PX
+        cr.set_source_rgba(*cat.hex_to_rgb(pal["muted"]), 1 - k)
+        for i in range(9):
+            angle = i * 2 * math.pi / 9
+            reach = 6 + k * 18
+            size = round((1 - k) * 8 + 4)
+            cr.rectangle(round(cx + math.cos(angle) * reach - size / 2), round(cy + math.sin(angle) * reach * 0.7 - size / 2), size, size)
+        cr.fill()
+
+
+cat.TRICKS["otter"] = Otter()
+
+
+def otter(c):
+    """Turn the cat into a dancing otter (when "otto" is written in the plan)."""
+    c.play("otter", OTTER_SECONDS)
+    c.say("otto!", 1.5)

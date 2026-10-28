@@ -4,6 +4,7 @@ import functools
 import json
 import os
 import random
+import re
 import subprocess
 import sys
 import threading
@@ -139,6 +140,7 @@ class MainWindow(Adw.ApplicationWindow):
         self.state = {"checks": {}, "plan": "", "meetings": [], "hours": None, "day_off": False, "routine": [], "order": [], "hidden": []}
         self.save_id = 0
         self.loading = True
+        self.ottos = 0  # times "otto" is written in the plan; one more turns the cat into an otter
 
         root = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
         root.add_css_class("bg")
@@ -1409,8 +1411,12 @@ class MainWindow(Adw.ApplicationWindow):
 
     def on_plan_changed(self, buf):
         self.state["plan"] = buf.get_text(buf.get_start_iter(), buf.get_end_iter(), False)
+        ottos = len(re.findall(r"\botto\b", self.state["plan"], re.IGNORECASE))
         if not self.loading:
             self.render_plan_items()
+            if ottos > self.ottos:
+                cat_tricks.otter(self.title_cat)
+        self.ottos = ottos
         self.save()
 
     def plan_items(self):
